@@ -43,14 +43,6 @@ def get_num_classes():
 
 
 def get_input_fn(mode, tfrecord_pattern, batch_size):
-  """Creates an input_fn that stores all the data in memory.
-  Args:
-   mode: one of tf.contrib.learn.ModeKeys.{TRAIN, INFER, EVAL}
-   tfrecord_pattern: path to a TF record file created using create_dataset.py.
-   batch_size: the batch size to output.
-  Returns:
-    A valid input_fn for the model estimator.
-  """
 
   def _parse_tfexample_fn(example_proto, mode):
     """Parse a single record which is expected to be a tensorflow.Example."""
@@ -366,4 +358,5 @@ if __name__ == "__main__":
       help="Whether to enable batch normalization or not.")
 
   FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+  with tf.device("/GPU:0"):
+    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
