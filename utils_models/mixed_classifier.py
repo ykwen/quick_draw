@@ -3,17 +3,15 @@ import tensorflow as tf
 
 
 class rnn_cnn_classifier:
-    def __init__(self, input_shape, num_classes, mode,
-                 num_rnn_layers=3, num_rnn_nodes=128, kind_rnn_nodes='lstm',
-                 bn_rnn=False, drop_rnn=0, lr_rnn=0.001, optimizer_rnn='adam',
-                 num_cnn_layers=[48, 64, 96], kernels_cnn=[5, 5, 3], strides_cnn=[1, 1, 1],
-                 bn_cnn=False, drop_cnn=0, lr_cnn=0.001, optimizer_cnn='dadm'):
+    def __init__(self, input_shape, num_classes, mode, lr=0.001, optimizer='adam',
+                 num_rnn_layers=3, num_rnn_nodes=128, kind_rnn_nodes='lstm', drop_rnn=0,
+                 num_cnn_layers=(48, 64, 96), kernels_cnn=(5, 5, 3), strides_cnn=(1, 1, 1),
+                 bn_cnn=False, drop_cnn=0):
         self.params = tf.contrib.training.HParams(
-            batch_shape=input_shape, num_class=num_classes, train_mode=mode,
-            num_r_l=num_rnn_layers, num_r_n=num_rnn_nodes, rnn_node=kind_rnn_nodes,
-            bn_rnn=bn_rnn, dr_rnn=drop_rnn, lr_rnn=lr_rnn, op_rnn=optimizer_rnn,
+            batch_shape=input_shape, num_class=num_classes, train_mode=mode, lr=lr, optimizer=optimizer,
+            num_r_l=num_rnn_layers, num_r_n=num_rnn_nodes, rnn_node=kind_rnn_nodes, dr_rnn=drop_rnn,
             num_c_l=num_cnn_layers, ker_cnn=kernels_cnn, str_cnn=strides_cnn,
-            bn_cnn=bn_cnn, dr_cnn=drop_cnn, lr_cnn=lr_cnn, op_cnn=optimizer_cnn
+            bn_cnn=bn_cnn, dr_cnn=drop_cnn
         )
 
         with tf.name_scope('placeholder'):
@@ -21,10 +19,10 @@ class rnn_cnn_classifier:
             self.ys = tf.placeholder(dtype=tf.float32, shape=input_shape[0])
             self.sequence_length = tf.placeholder(dtype=tf.int16, shape=input_shape[0])
 
-        with tf.variable_scope('rnn', reuse=tf.AUTO_REUSE):
-            self.rnn_out = self.init_rnn()
         with tf.variable_scope('cnn', reuse=tf.AUTO_REUSE):
             self.cnn_out = self.init_cnn()
+        with tf.variable_scope('rnn', reuse=tf.AUTO_REUSE):
+            self.rnn_out = self.init_rnn()
         with tf.variable_scope('logits', reuse=tf.AUTO_REUSE):
             self.logits = self.init_logits()
             self.loss, self.acc, self.step = self.train()
@@ -37,6 +35,19 @@ class rnn_cnn_classifier:
 
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer)
+
+    def init_cnn(self):
+        n_layers, kernels, strides = self.params.num_c_l, self.params.ker_cnn, self.params.str_cnn
+        bn, dr, mode = self.params.bn_cnn, self.params.dr_cnn, self.params.train_mode
+        out = self.xs
+        for i in range(len(n_layers)):
+            if bn:
+                out = tf.layers.batch_normalization(bn, training=mode)
+            if dr > 0:
+                out = tf.layers.dropout(out, dr, training=mode)
+            out = tf.layers.conv1d(out, n_layers[i], kernels[i], strides[i], padding='same',
+                                   activation=None, name='conv_{}'.format(i))
+        return out
 
     def init_rnn(self):
         def _get_rnn_cell():
@@ -62,9 +73,8 @@ class rnn_cnn_classifier:
             bw = [tf.contrib.rnn.DropoutWrapper(c) for c in bw]
 
         outputs, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            fw, bw, inputs=self.xs, sequence_length=self.sequence_length, dtype=tf.float32
+            fw, bw, inputs=self.cnn_out, sequence_length=self.sequence_length, dtype=tf.float32
         )
         return outputs
 
-    def init_cnn(self):
-        return None
+
