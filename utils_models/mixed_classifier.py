@@ -3,21 +3,21 @@ import tensorflow as tf
 
 
 class rnn_cnn_classifier:
-    def __init__(self, input_shape, num_classes, mode, lr=0.001, optimizer='adam',
+    def __init__(self, input_shape, num_classes, train_mode, lr=0.001, optimizer='adam',
                  num_rnn_layers=3, num_rnn_nodes=128, kind_rnn_nodes='lstm', drop_rnn=0,
                  num_cnn_layers=(48, 64, 96), kernels_cnn=(5, 5, 3), strides_cnn=(1, 1, 1),
                  bn_cnn=False, drop_cnn=0):
         self.params = tf.contrib.training.HParams(
-            batch_shape=input_shape, num_class=num_classes, train_mode=mode, lr=lr, optimizer=optimizer,
+            batch_shape=input_shape, num_class=num_classes, train_mode=train_mode, lr=lr, optimizer=optimizer,
             num_r_l=num_rnn_layers, num_r_n=num_rnn_nodes, rnn_node=kind_rnn_nodes, dr_rnn=drop_rnn,
             num_c_l=num_cnn_layers, ker_cnn=kernels_cnn, str_cnn=strides_cnn,
             bn_cnn=bn_cnn, dr_cnn=drop_cnn
         )
 
         with tf.name_scope('placeholder'):
-            self.xs = tf.placeholder(dtype=tf.float32, shape=input_shape)
-            self.ys = tf.placeholder(dtype=tf.float32, shape=input_shape[0])
-            self.sequence_length = tf.placeholder(dtype=tf.int16, shape=input_shape[0])
+            self.xs = tf.placeholder(dtype=tf.float32, shape=(input_shape[0], input_shape[1], num_rnn_layers))
+            self.ys = tf.placeholder(dtype=tf.int32, shape=input_shape[0])
+            self.sequence_length = tf.placeholder(dtype=tf.int32, shape=input_shape[0])
 
         with tf.variable_scope('cnn', reuse=tf.AUTO_REUSE):
             self.cnn_out = self.init_cnn()
@@ -34,7 +34,7 @@ class rnn_cnn_classifier:
         self.saver = tf.train.Saver()
 
         self.sess = tf.Session()
-        self.sess.run(tf.global_variables_initializer)
+        self.sess.run(tf.global_variables_initializer())
 
     def init_cnn(self):
         n_layers, kernels, strides = self.params.num_c_l, self.params.ker_cnn, self.params.str_cnn
@@ -42,7 +42,7 @@ class rnn_cnn_classifier:
         out = self.xs
         for i in range(len(n_layers)):
             if bn:
-                out = tf.layers.batch_normalization(bn, training=mode)
+                out = tf.layers.batch_normalization(out, training=mode)
             if dr > 0:
                 out = tf.layers.dropout(out, dr, training=mode)
             out = tf.layers.conv1d(out, n_layers[i], kernels[i], strides[i], padding='same',
@@ -77,4 +77,39 @@ class rnn_cnn_classifier:
         )
         return outputs
 
+    def init_logits(self):
+        # choose the output according to the real length and hidden states
+        # outputs is [batch_size, L, N] where L is the maximal sequence length and N
+        # the number of nodes in the last layer.
+        mask = tf.tile(
+            tf.expand_dims(tf.sequence_mask(self.sequence_length, tf.shape(self.rnn_out)[1]), 2),
+            [1, 1, tf.shape(self.rnn_out)[2]])
+        zero_outside = tf.where(mask, self.rnn_out, tf.zeros_like(self.rnn_out))
+        real_out = tf.reduce_sum(zero_outside, axis=1)
 
+        # add dense layer
+        return tf.layers.dense(real_out, self.params.num_class)
+
+    def train(self, lr_decay=None, epoch=None):
+        # calculate loss
+        losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.ys, logits=self.logits)
+        loss = tf.reduce_mean(losses)
+        # calculate accuracy
+        pred = tf.argmax(self.logits, axis=1)
+        acc = tf.metrics.accuracy(self.ys, pred)
+        # define optimizer and traininf step
+        opt_name, lr = self.params.optimizer, self.params.lr
+        if lr_decay:
+            if not epoch:
+                raise ValueError('Number of Epoch is not defined')
+            lr /= (1 + lr_decay * epoch)
+        if opt_name == 'adam':
+            optimizer = tf.train.AdamOptimizer(lr)
+        elif opt_name == 'rms':
+            optimizer = tf.train.RMSPropOptimizer(lr)
+        else:
+            optimizer = tf.train.MomentumOptimizer(lr, momentum=0.9)
+
+        # define train step
+        step = optimizer.minimize(loss)
+        return loss, acc, step
