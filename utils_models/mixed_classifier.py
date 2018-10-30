@@ -33,7 +33,7 @@ class rnn_cnn_classifier:
 
         self.saver = tf.train.Saver()
 
-        self.sess = tf.Session()
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
         self.sess.run(tf.global_variables_initializer())
 
     def init_cnn(self):
