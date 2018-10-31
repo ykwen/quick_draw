@@ -122,17 +122,18 @@ def run_mixed_model(num_classes):
     )
 
     model_dir = "model/mixed_model/test"
-    train_dir = r"data/training/*"
-    eval_dir = r"data/eval/*"
+    train_dir = "data/training/training.tfrecord-?????-of-?????"
+    eval_dir = "data/eval/eval.tfrecord-?????-of-?????"
 
     config = tf.estimator.RunConfig(model_dir=model_dir)
 
     max_steps = 500
     est, tr_, ev_ = get_specs(params, config, train_dir, eval_dir, max_steps)
-    tf.estimator.train_and_evaluate(est, tr_, ev_)
+    return tf.estimator.train_and_evaluate(est, tr_, ev_)
 
 
 if __name__ == '__main__':
     classes, num_classes = get_num_classes()
     with tf.device('/GPU:0'):
-        run_mixed_model(num_classes)
+        result = run_mixed_model(num_classes)
+        print(result)
