@@ -11,6 +11,8 @@ class cnn_rnn_classifier:
         if estimator:
             self.params = params
             self.xs, self.ys, self.sequence_length, mode = inputs
+            self.xs = tf.reshape(self.xs, [self.params.batch_size, -1, 3])
+            self.mode = mode
             self.params.add_hparam("train_mode", mode == tf.estimator.ModeKeys.TRAIN)
         else:
             self.params = tf.contrib.training.HParams(
@@ -48,12 +50,12 @@ class cnn_rnn_classifier:
         bn, dr, mode = self.params.bn_cnn, self.params.dr_cnn, self.params.train_mode
         out = self.xs
         for i in range(len(n_layers)):
+            out = tf.layers.conv1d(out, n_layers[i], kernels[i], strides[i], padding='same',
+                                   activation=None, name='conv_{}'.format(i))
             if bn:
                 out = tf.layers.batch_normalization(out, training=mode)
             if dr > 0:
                 out = tf.layers.dropout(out, dr, training=mode)
-            out = tf.layers.conv1d(out, n_layers[i], kernels[i], strides[i], padding='same',
-                                   activation=None, name='conv_{}'.format(i))
         return out
 
     def init_rnn(self):
@@ -110,13 +112,11 @@ class cnn_rnn_classifier:
             if not epoch:
                 raise ValueError('Number of Epoch is not defined')
             lr /= (1 + lr_decay * epoch)
-        if opt_name == 'adam':
-            optimizer = tf.train.AdamOptimizer(lr)
-        elif opt_name == 'rms':
-            optimizer = tf.train.RMSPropOptimizer(lr)
-        else:
-            optimizer = tf.train.MomentumOptimizer(lr, momentum=0.9)
 
-        # define train step
-        step = optimizer.minimize(loss, global_step=tf.train.get_global_step())
+        step = tf.contrib.layers.optimize_loss(
+            loss=loss,
+            global_step=tf.train.get_global_step(),
+            learning_rate=lr,
+            optimizer="opt_name",
+            summaries=["learning_rate", "loss", "gradients", "gradient_norm"])
         return loss, acc, pred, step

@@ -83,13 +83,12 @@ def model_fn(features, labels, mode, params):
     x, l, y = _get_input(features, labels)
     # define model
     dnn = model(estimator=True, params=params, inputs=[x, y, l, mode])
-    logits, loss, train_step, preds, acc = dnn.logits, dnn.loss, dnn.step, dnn.prediction, dnn.acc
     return tf.estimator.EstimatorSpec(
         mode=mode,
-        predictions={"logits": logits, "predictions": preds},
-        loss=loss,
-        train_op=train_step,
-        eval_metric_ops={"accuracy": acc})
+        predictions={"logits": dnn.logits, "predictions": dnn.prediction},
+        loss=dnn.loss,
+        train_op=dnn.step,
+        eval_metric_ops={"accuracy": dnn.acc})
 
 
 # create specs for tf train_and_evaluate
@@ -114,26 +113,27 @@ def get_specs(params, config, train_data, eval_data, steps):
 
 def run_mixed_model(num_classes):
     params = tf.contrib.training.HParams(
-        batch_size=50, num_class=num_classes,
-        lr=0.001, optimizer='adam',
+        batch_size=80, num_class=num_classes,
+        lr=0.0001, optimizer='Adam',
         num_r_l=3, num_r_n=128, rnn_node='lstm', dr_rnn=0.2,
         num_c_l=(48, 64, 96), ker_cnn=(5, 5, 3), str_cnn=(1, 1, 1),
-        bn_cnn=True, dr_cnn=0.2
+        bn_cnn=True, dr_cnn=0.3
     )
 
     model_dir = "model/mixed_model/test"
     train_dir = "data/training/training.tfrecord-?????-of-?????"
     eval_dir = "data/eval/eval.tfrecord-?????-of-?????"
 
-    config = tf.estimator.RunConfig(model_dir=model_dir)
+    config = tf.estimator.RunConfig(model_dir=model_dir,
+                                    save_checkpoints_secs=300,
+                                    save_summary_steps=100)
 
-    max_steps = 500
+    max_steps = 100000
     est, tr_, ev_ = get_specs(params, config, train_dir, eval_dir, max_steps)
-    return tf.estimator.train_and_evaluate(est, tr_, ev_)
+    tf.estimator.train_and_evaluate(est, tr_, ev_)
 
 
 if __name__ == '__main__':
     classes, num_classes = get_num_classes()
     with tf.device('/GPU:0'):
-        result = run_mixed_model(num_classes)
-        print(result)
+        run_mixed_model(num_classes)
