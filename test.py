@@ -128,7 +128,7 @@ def run_mixed_model(num_classes):
                                     save_checkpoints_secs=300,
                                     save_summary_steps=100)
 
-    max_steps = 100000
+    max_steps = 1000000
     est, tr_, ev_ = get_specs(params, config, train_dir, eval_dir, max_steps)
     tf.estimator.train_and_evaluate(est, tr_, ev_)
 

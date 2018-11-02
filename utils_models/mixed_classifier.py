@@ -117,6 +117,6 @@ class cnn_rnn_classifier:
             loss=loss,
             global_step=tf.train.get_global_step(),
             learning_rate=lr,
-            optimizer="opt_name",
+            optimizer=opt_name,
             summaries=["learning_rate", "loss", "gradients", "gradient_norm"])
         return loss, acc, pred, step
