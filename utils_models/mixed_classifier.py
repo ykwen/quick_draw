@@ -3,7 +3,13 @@ import tensorflow as tf
 
 
 class cnn_rnn_classifier:
-    def __init__(self, estimator=False, params=None, inputs=None, batch_size=None, max_len = None,
+    def __init__(self, estimator=False, params=tf.contrib.training.HParams(
+                                                batch_size=80, num_class=345,
+                                                lr=0.0001, optimizer='Adam',
+                                                num_r_l=3, num_r_n=128, rnn_node='lstm', dr_rnn=0.2,
+                                                num_c_l=(48, 64, 96), ker_cnn=(5, 5, 3), str_cnn=(1, 1, 1),
+                                                bn_cnn=True, dr_cnn=0.3),
+                 inputs=None, batch_size=None, max_len=None,
                  num_classes=None, train_mode=None, lr=0.001, optimizer='adam',
                  num_rnn_layers=3, num_rnn_nodes=128, kind_rnn_nodes='lstm', drop_rnn=0,
                  num_cnn_layers=(48, 64, 96), kernels_cnn=(5, 5, 3), strides_cnn=(1, 1, 1),
@@ -87,9 +93,10 @@ class cnn_rnn_classifier:
         return outputs
 
     def init_logits(self):
-        # choose the output according to the real length and hidden states
-        # outputs is [batch_size, L, N] where L is the maximal sequence length and N
-        # the number of nodes in the last layer.
+        # To create a compact, fixed-length embedding, sum up the output of the LSTMs.
+        # first zero out the regions of the batch where the sequences have no data.
+        # outputs is [batch_size, L, N] where L is the maximal sequence length
+        # and N the number of nodes in the last layer.
         mask = tf.tile(
             tf.expand_dims(tf.sequence_mask(self.sequence_length, tf.shape(self.rnn_out)[1]), 2),
             [1, 1, tf.shape(self.rnn_out)[2]])
