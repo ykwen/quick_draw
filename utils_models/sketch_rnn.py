@@ -3,7 +3,7 @@ from utils_models.utils import bivariate_normal
 
 
 class sketch_rnn:
-    def __init__(self, estimator=False, params=None,
+    def __init__(self, estimator=False, params=None, mode=None,
                  inputs=None, batch_size=None, learning_rate=None, optimizer=None,
                  num_classes=None, max_len=None, encoder_dim=None,
                  encoder_restore=False, classifier=True,
@@ -14,14 +14,24 @@ class sketch_rnn:
             self.xs, self.ys, self.seq_len, self.mode = inputs
             self.params.add_hparam("train_mode", self.mode == tf.estimator.ModeKeys.TRAIN)
         else:
-            self.en_size = max_len
-            self.en_dim = encoder_dim
-            self.batch_size = batch_size
-            self.num_classes = num_classes
+            self.params = tf.contrib.training.HParams(
+                batch_size=batch_size,
+                lr=learning_rate,
+                opt_name=optimizer,
+                num_classes=num_classes,
+                max_len=max_len,
+                num_r_n=encoder_dim,
+                num_r_l=max_len,
+                decoder_size=decoder_size,
+                decoder_dim=max(max_len, decoder_dim),
+                gmm_dim=gmm_dim,
+                mode=mode,
+                training=mode == tf.estimator.ModeKeys.TRAIN
+            )
 
             with tf.name_scope('placeholder'):
                 self.xs = tf.placeholder([batch_size, max_len, 5], tf.float32)
-                self.ys = tf.placeholder(self.batch_size, tf.int8)
+                self.ys = tf.placeholder(batch_size, tf.int8)
                 if decoder and not vector_shape:
                     self.vecs = tf.placeholder(vector_shape)
 
