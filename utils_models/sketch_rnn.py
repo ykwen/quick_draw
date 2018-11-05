@@ -64,6 +64,10 @@ class sketch_rnn:
             self.sess.run(tf.global_variables_initializer())
 
     def get_rnn_layers(self):
+        '''
+        Using model self.params
+        :return: certain type of rnn cell
+        '''
         def _get_rnn_cell():
             node = self.params.rnn_node
             if node == 'lstm':
@@ -109,6 +113,10 @@ class sketch_rnn:
         return logits, loss, acc, step
 
     def decoder_training(self):
+        '''
+        define and train decoder by inputs
+        :return: decode losses, optimization step, output parameters
+        '''
         with tf.variable_scope('decoder', reuse=tf.AUTO_REUSE):
             # (N, D)
             miu = tf.layers.dense(self.en_out, self.en_out.shape[1], name='miu')
@@ -159,6 +167,11 @@ class sketch_rnn:
         return loss, step, loss_params
 
     def get_decode_loss(self, de_out):
+        '''
+        calculate M dim normal loss and sum by weights
+        :param de_out: parameters
+        :return: loss = reconstruction loss + kl loss * kl weight
+        '''
         muxs = tf.layers.dense(de_out, self.params.gmm_dim, name="mux")
         muys = tf.layers.dense(de_out, self.params.gmm_dim, name="muy")
         sigxs_ = tf.layers.dense(de_out, self.params.gmm_dim, name="sigx")
@@ -184,6 +197,11 @@ class sketch_rnn:
         return loss_params, tf.add(L_R, tf.multiply(L_kl, kl_w))
 
     def reconstruction_loss(self, loss_params):
+        '''
+        Ls: calculate and sum by weights
+        :param loss_params: muxs, muys, sigxs, sigys, cors, weights, qs_
+        :return: loss = ls + lp
+        '''
         qs = loss_params[-1]
         N_max = tf.reduce_sum(self.seq_len + self.xs.shape[0])
 
