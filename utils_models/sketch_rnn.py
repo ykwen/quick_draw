@@ -181,12 +181,12 @@ class sketch_rnn:
         qs_ = tf.layers.dense(de_out, 3, name="q(pi)")
 
         # add randomness
-        if self.params.temper:
+        if self.params.temper and self.params.mode != tf.estimator.ModeKeys.TRAIN:
             weights_, qs_ = weights_ / self.params.temper, qs_ / self.params.temper
 
         weights = tf.nn.softmax(weights_)
         sigxs, sigys, cors = tf.nn.softmax(sigxs_), tf.nn.softmax(sigys_), tf.nn.tanh(cors_)
-        if self.params.temper:
+        if self.params.temper and self.params.mode != tf.estimator.ModeKeys.TRAIN:
             t = tf.sqrt(self.params.temper)
             sigxs, sigys = sigxs * t, sigys * t
 

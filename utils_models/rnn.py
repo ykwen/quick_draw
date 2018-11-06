@@ -1,6 +1,6 @@
 import tensorflow as tf
 import functools
-from utils_models.utils import bivariate_normal
+from utils_models.utils import bivariate_normal, sample_fn
 
 
 # an basic rnn model for implementing
@@ -182,11 +182,12 @@ class rnn_decoder(basic_rnn):
 
             def _end_fn(inputs):
                 '''
-
+                generate p3 = 1
                 :param inputs: decoder transformed output
                 :return: N boolean of whether its ended
                 '''
-                return tf.equal(inputs, tf.constant([0, 0, 0, 0, 1], tf.int32))
+                n = self.params.batch_size
+                return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1, tf.int32))
 
             s0 = tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32)
             helper = tf.contrib.seq2seq.InferenceHelper(
@@ -219,9 +220,13 @@ class rnn_decoder(basic_rnn):
         return out
 
     def get_loss(self):
+        '''
+        the logits from loss is the raw output of rnn. To transform, call function sample_fn
+        :return:
+        '''
         with tf.variable_scope('decoder', reuse=tf.AUTO_REUSE):
             logits, loss = self.cal_decoder_loss(self.rnn_out)
-        return logits, loss
+        return sample_fn(self.params, logits), loss
 
     def cal_decoder_loss(self, de_out):
         '''
@@ -240,12 +245,12 @@ class rnn_decoder(basic_rnn):
         qs_ = tf.slice(de_out, [0, 6 * m], [n, 3])
 
         # add randomness
-        if self.params.temper:
+        if self.params.mode != tf.estimator.ModeKeys.TRAIN and self.params.temper:
             weights_, qs_ = weights_ / self.params.temper, qs_ / self.params.temper
 
         weights = tf.nn.softmax(weights_)
         sigxs, sigys, cors = tf.nn.softmax(sigxs_), tf.nn.softmax(sigys_), tf.nn.tanh(cors_)
-        if self.params.temper:
+        if self.params.mode != tf.estimator.ModeKeys.TRAIN and self.params.temper:
             t = tf.sqrt(self.params.temper)
             sigxs, sigys = sigxs * t, sigys * t
 

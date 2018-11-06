@@ -27,3 +27,21 @@ def bivariate_normal(inputs, params):
     tmp = tf.multiply(tf.multiply(tf.multiply(2 * math.pi, sigxs), sigys), tf.sqrt(_cor_sq))
     p = tf.multiply(tf.divide(1, tmp), tf.exp(-tf.divide(z, tf.multiply(2, _cor_sq)))) # N_max, M
     return tf.matmul(p, tf.reshape(weights, [M, 1]))
+
+
+def sample_fn(params, de_out):
+    '''
+    first implementing in tf helper.py, then modified to use for transform output
+    :param de_out: decoder raw outputs
+    :return: [N, L, (x, y, p1, p2, p3)]
+    '''
+    n, m = params.batch_size, params.gmm_dim
+    muxs = tf.slice(de_out, [0, 0], [n, m])
+    muys = tf.slice(de_out, [0, m], [n, m])
+    weights_ = tf.transpose(tf.slice(de_out, [0, 5 * m], [n, m]))
+    qs_ = tf.slice(de_out, [0, 6 * m], [n, 3])
+
+    x, y = tf.trace(tf.matmul(muxs, weights_)), tf.trace(tf.matmul(muys, weights_))
+    x, y = tf.reshape(x, [params.batch_size, 1]), tf.reshape(y, [params.batch_size, 1])
+    q = tf.one_hot(tf.argmax(qs_, axis=1), 3)
+    return tf.concat([x, y, q], axis=1)
