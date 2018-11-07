@@ -8,8 +8,8 @@ Training and evaluating data in data
 
 Saved models in model
 
-### Tutrial code: 
-The tutorial code use the tutorial given by tensorflow doing classification by CNN+RNN.
+### Tutorial: 
+The tutorial is given by tensorflow.
 
 https://www.tensorflow.org/tutorials/sequences/recurrent_quickdraw
 
