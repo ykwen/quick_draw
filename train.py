@@ -5,15 +5,22 @@ import os
 
 
 def mask_seq_len(X, max_l):
+    """
+    Form input features to certain length and return the true length
+    :param X:
+    :param max_l:
+    :return:
+    """
     seq_l = []
     for ind, xx in enumerate(X):
         one_seq_l = len(xx)
-        seq_l.append(one_seq_l)
         holder = np.array([0, 0, 0, 0, 1]).reshape([1, 5])
         if one_seq_l < max_l:
             X[ind] = np.concatenate([xx, np.repeat(holder, max_l - one_seq_l, axis=0)]).reshape([max_l, 5])
         else:
             X[ind] = np.concatenate([xx[:max_l - 1], holder]).reshape([max_l, 5])
+            one_seq_l = max_l
+        seq_l.append(one_seq_l)
     return np.stack(X).reshape([X.shape[0], max_l, 5]), np.array(seq_l)
 
 
@@ -65,13 +72,13 @@ def train_model(X, Y):
         classifier=True,
         bidir=True,
         model="./model/rnn_classifier/diff/bidir",
-        summary="./model/rnn_classifier/log/diff",
+        summary="./model/rnn_classifier/log/diff/bidir",
         rnn_node="lstm",
         num_r_n=512,
         num_r_l=3,
         dr_rnn=0.2,
         num_classes=8,
-        restore=False,
+        restore=True,
         trained_steps=0
     )
     with tf.device("/GPU:0"):
@@ -117,7 +124,7 @@ if __name__ == '__main__':
         trans = load_one_transformed(save_path + "/" + c + ".npy")
         X = np.concatenate([X, np.array(trans)])
         ind_test = np.random.choice(len(trans), 1)[0]
-        visualize_one_transformed(trans[ind_test], c)
+        # visualize_one_transformed(trans[ind_test], c)
         Y = np.concatenate([Y, [y_dict[c]] * len(trans)])
 
     train_model(X, Y)

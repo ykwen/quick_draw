@@ -18,7 +18,7 @@ class basic_rnn:
                 self.ys = tf.placeholder(tf.int64, self.params.batch_size, "classes")
                 self.seq_len = tf.placeholder(tf.int32, self.params.batch_size, "sequence_length")
 
-        self.rnn_out = self.get_rnn_layers()
+        self.rnn_out, self.rnn_out_all = self.get_rnn_layers()
         self.logits, self.loss = self.get_loss()
 
         self.step = tf.contrib.layers.optimize_loss(
@@ -96,9 +96,9 @@ class basic_rnn:
             tf.gather_nd(outputs,
                          tf.concat([
                              tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
-                             tf.reshape(self.seq_len, [self.params.batch_size, 1])], axis=1)),
+                             tf.reshape(tf.subtract(self.seq_len, 1), [self.params.batch_size, 1])], axis=1)),
             [outputs.shape[0], outputs.shape[-1]])
-        return real_out
+        return real_out, outputs
 
     def get_basic_rnn(self, cell):
         '''
