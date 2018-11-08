@@ -51,10 +51,10 @@ class basic_rnn:
                 restore.restore(self.sess, self.params.model)
 
     def get_rnn_layers(self):
-        '''
+        """
         Using model self.params
         :return: certain type of rnn cell
-        '''
+        """
         def _get_rnn_cell():
             node = self.params.rnn_node
             if node == 'lstm':
@@ -101,10 +101,11 @@ class basic_rnn:
         return real_out, outputs
 
     def get_basic_rnn(self, cell):
-        '''
+        """
+        return output of single direction rnn
         :param cell: a certain type of rnn cell
         :return: output of length of single direction rnn cell
-        '''
+        """
         layers = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
         if self.params.dr > 0:
             layers = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - self.params.dr) for c in layers]
@@ -112,22 +113,28 @@ class basic_rnn:
         cells = tf.nn.rnn_cell.MultiRNNCell(layers)
 
         outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len)
-        return tf.reshape(tf.gather(outputs, self.seq_len, axis=1), [outputs.shape[0], outputs.shape[-1]])
+        real_output = tf.reshape(
+            tf.gather_nd(outputs,
+                         tf.concat([
+                             tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
+                             tf.reshape(tf.subtract(self.seq_len, 1), [self.params.batch_size, 1])], axis=1)),
+            [outputs.shape[0], outputs.shape[-1]])
+        return real_output
 
     def get_loss(self):
-        '''
+        """
         To be implemented in special cases
         :return: loss
-        '''
+        """
         raise NotImplementedError("The loss function is not implemented")
 
 
 class rnn_encoder(basic_rnn):
     def get_loss(self):
-        '''
+        """
 
         :return: classifier logits output and softmax cross entropy error
-        '''
+        """
         with tf.variable_scope("logits", reuse=tf.AUTO_REUSE):
             logits = tf.layers.dense(self.rnn_out, self.params.num_classes)
             loss = tf.losses.sparse_softmax_cross_entropy(self.ys, logits)
@@ -136,28 +143,28 @@ class rnn_encoder(basic_rnn):
 
 class rnn_decoder(basic_rnn):
     def get_basic_rnn(self, cell):
-        '''
+        """
 
         :param cell: a certain type of rnn cell
         :return: decoder outputs
-        '''
+        """
         de_layers = [tf.nn.rnn_cell.BasicLSTMCell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
         de_cells = tf.nn.rnn_cell.MultiRNNCell(de_layers)
 
         def _get_proj_layer():
-            '''
+            """
 
             :return: projection to parameters
-            '''
+            """
             return functools.partial(
                 tf.layers.dense, units=6 * self.params.gmm_dim + 3
             )
 
         def _train_with_inputs_helper():
-            '''
+            """
 
             :return: training helper with given data and types
-            '''
+            """
             s0 = tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32)
             s0s = tf.reshape(tf.tile(s0, self.rnn_out.shape[0]), [self.rnn_out.shape[0], 1, s0.shape[0]])
             s_ = tf.concat([s0s, self.xs], axis=1)
@@ -169,16 +176,16 @@ class rnn_decoder(basic_rnn):
             return helper
 
         def _train_self_helper():
-            '''
+            """
 
             :return: self-defined helper take only initial inputs
-            '''
+            """
             def _sample_fn(de_out):
-                '''
+                """
                 implementing in tf helper.py
                 :param de_out: decoder raw outputs
                 :return: [N, (x, y, p1, p2, p3)]
-                '''
+                """
                 n, m = self.params.batch_size, self.params.gmm_dim
                 muxs = tf.slice(de_out, [0, 0], [n, m])
                 muys = tf.slice(de_out, [0, m], [n, m])
@@ -191,11 +198,11 @@ class rnn_decoder(basic_rnn):
                 return tf.concat([x, y, q], axis=1)
 
             def _end_fn(inputs):
-                '''
+                """
                 generate p3 = 1
                 :param inputs: decoder transformed output
                 :return: N boolean of whether its ended
-                '''
+                """
                 n = self.params.batch_size
                 return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1, tf.int32))
 
@@ -230,20 +237,20 @@ class rnn_decoder(basic_rnn):
         return out
 
     def get_loss(self):
-        '''
+        """
         the logits from loss is the raw output of rnn. To transform, call function sample_fn
         :return:
-        '''
+        """
         with tf.variable_scope('decoder', reuse=tf.AUTO_REUSE):
             logits, loss = self.cal_decoder_loss(self.rnn_out)
         return sample_fn(self.params, logits), loss
 
     def cal_decoder_loss(self, de_out):
-        '''
+        """
 
         :param de_out: parameters
         :return: loss = reconstruction loss + kl loss * kl weight
-        '''
+        """
         n, m = self.params.batch_size, self.params.gmm_dim
         # get parameters for normal distribution from outputs
         muxs = tf.slice(de_out, [0, 0], [n, m])
@@ -271,11 +278,11 @@ class rnn_decoder(basic_rnn):
         return loss_params, tf.add(L_R, tf.multiply(L_kl, kl_w))
 
     def reconstruction_loss(self, loss_params):
-        '''
+        """
 
         :param loss_params:
         :return: loss = ls + lp
-        '''
+        """
         qs = loss_params[-1]
         N_max = tf.reduce_sum(self.seq_len + self.xs.shape[0])
 

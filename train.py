@@ -61,7 +61,7 @@ def train_model(X, Y):
     # define parameters here
     batch_size = 256
     num_iteration = 100000
-    verbose = 500
+    verbose = 100
     max_len = 100
     params = tf.contrib.training.HParams(
         batch_size=batch_size,
