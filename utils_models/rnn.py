@@ -12,10 +12,10 @@ class basic_rnn:
         else:
             # if it's not used in estimator, need to define placeholder
             with tf.name_scope("placeholder"):
-                self.xs = tf.placeholder(tf.int32,
+                self.xs = tf.placeholder(tf.float32,
                                          [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                                          "inputs")
-                self.ys = tf.placeholder(tf.int32, [self.params.batch_size, None], "classes")
+                self.ys = tf.placeholder(tf.int64, self.params.batch_size, "classes")
                 self.seq_len = tf.placeholder(tf.int32, self.params.batch_size, "sequence_length")
 
         self.rnn_out = self.get_rnn_layers()
@@ -32,14 +32,19 @@ class basic_rnn:
             # define summary and calculate result
             if self.params.classifier:
                 self.preds = tf.argmax(self.logits, axis=1)
-                self.acc = tf.metrics.accuracy(self.ys, self.preds)
+                self.acc = tf.contrib.metrics.accuracy(labels=tf.reshape(self.ys, [self.params.batch_size, 1]),
+                                                  predictions=self.preds)
                 tf.summary.scalar('train_accuracy', self.acc)
-            self.sum = tf.summary.merge_all()
+                tf.summary.scalar('train_loss', self.loss)
 
             self.saver = tf.train.Saver()
 
             self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
             self.sess.run(tf.global_variables_initializer())
+
+            self.sum = tf.summary.merge_all()
+            self.summary_writer = tf.summary.FileWriter(self.params.summary)
+            self.summary_writer.add_graph(self.sess.graph)
 
             if self.params.restore:
                 restore = tf.train.Saver()
@@ -69,10 +74,10 @@ class basic_rnn:
             return self.get_basic_rnn(cell)
 
     def get_bi_rnn(self, cell):
-        '''
+        """
         :param cell: a certain type of rnn cell
         :return: final output of bi-direction dynamic rnn according to certain sequence length
-        '''
+        """
         # define forward and backward layers
         fw = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
         bw = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
@@ -87,7 +92,12 @@ class basic_rnn:
             fw, bw, inputs=self.xs, sequence_length=self.seq_len, dtype=tf.float32
         )
         # use the final hidden states, output is [N, max_length, D]
-        real_out = tf.reshape(tf.gather(outputs, self.seq_len, axis=1), [outputs.shape[0], outputs.shape[-1]])
+        real_out = tf.reshape(
+            tf.gather_nd(outputs,
+                         tf.concat([
+                             tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
+                             tf.reshape(self.seq_len, [self.params.batch_size, 1])], axis=1)),
+            [outputs.shape[0], outputs.shape[-1]])
         return real_out
 
     def get_basic_rnn(self, cell):

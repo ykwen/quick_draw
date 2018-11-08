@@ -83,10 +83,11 @@ def visualize_one_picture(drawing):
     plt.show()
 
 
-def visualize_one_transformed(features):
+def visualize_one_transformed(features, y=None):
     """
     plot drawing from transformed data
     :param features: transformed features [L, 5]
+    :param y: label of data, for fig title
     :return: None
     """
     lines = []
@@ -106,6 +107,8 @@ def visualize_one_transformed(features):
         else:
             break
         prev = [f[0] + prev[0], f[1] + prev[1]]
+    if y:
+        plt.title(y)
     for l in lines:
         plt.plot(l[0], l[1])
     plt.show()
@@ -120,6 +123,20 @@ def save_transformed(transformed, save_path):
 
 def load_one_transformed(file):
     return np.load(file)
+
+
+def get_max_seq_len(data):
+    max_l = 0
+    for d in data:
+        max_l = max(max_l, len(d))
+    return max_l
+
+
+def get_mean_seq_len(data):
+    l = []
+    for d in data:
+        l.append(len(d))
+    return np.mean(l)
 
 
 if __name__ == '__main__':
