@@ -60,7 +60,7 @@ def train_model(X, Y):
     """
     # define parameters here
     batch_size = 256
-    num_iteration = 1000000
+    num_iteration = 100000
     verbose = 500
     max_len = 100
     params = tf.contrib.training.HParams(
@@ -72,13 +72,14 @@ def train_model(X, Y):
         classifier=True,
         bidir=True,
         model="./model/rnn_classifier/diff/bidir",
+        best_model="./model/rnn_classifier/diff/best_bidir",
         summary="./model/rnn_classifier/log/diff/bidir",
         rnn_node="lstm",
         num_r_n=512,
         num_r_l=3,
         dr_rnn=0.2,
         num_classes=8,
-        restore=True,
+        restore=False,
         trained_steps=0
     )
     with tf.device("/GPU:0"):
@@ -89,17 +90,21 @@ def train_model(X, Y):
         model = rnn_encoder(params, estimator=False)
         # get batches
         batch_generator = get_batch(X, Y, batch_size=batch_size, max_seq_len=max_len)
+        prev_loss = float("inf")
         for i in range(num_iteration):
             train_x, train_y, _, _, train_len, _ = next(batch_generator)
             train_sum, _ = model.sess.run([model.sum, model.step], feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
             model.summary_writer.add_summary(train_sum, i + params.trained_steps)
+            model.saver.save(model.sess, params.model)
             if i % verbose == 0 or i == num_iteration - 1:
-                model.saver.save(model.sess, params.model)
                 valid_loss, valid_acc = model.sess.run([model.loss, model.acc],
                                                        feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
                 test_summary.value[0].simple_value = valid_loss
                 test_summary.value[1].simple_value = valid_acc
                 model.summary_writer.add_summary(test_summary, i + params.trained_steps)
+                if prev_loss > valid_loss:
+                    model.saver.save(model.sess, params.best_model)
+                    prev_loss = valid_loss
 
 
 if __name__ == '__main__':
