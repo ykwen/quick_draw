@@ -26,14 +26,15 @@ class basic_rnn:
             global_step=tf.train.get_global_step(),
             learning_rate=self.params.lr,
             optimizer=self.params.opt_name,
+            clip_gradients=None,
             summaries=["learning_rate", "loss", "gradients", "gradient_norm"])
 
         if not estimator:
             # define summary and calculate result
             if self.params.classifier:
                 self.preds = tf.argmax(self.logits, axis=1)
-                self.acc = tf.contrib.metrics.accuracy(labels=tf.reshape(self.ys, [self.params.batch_size, 1]),
-                                                  predictions=self.preds)
+                self.acc = tf.contrib.metrics.accuracy(labels=self.ys,
+                                                       predictions=self.preds)
                 tf.summary.scalar('train_accuracy', self.acc)
                 tf.summary.scalar('train_loss', self.loss)
 
@@ -63,7 +64,7 @@ class basic_rnn:
                 cell = tf.nn.rnn_cell.GRUCell
             else:
                 cell = tf.nn.rnn_cell.BasicRNNCell
-            return cell
+            return functools.partial(cell, activation=self.params.activation)
 
         # get rnn cell type
         cell = _get_rnn_cell()
@@ -107,19 +108,19 @@ class basic_rnn:
         :return: output of length of single direction rnn cell
         """
         layers = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
-        if self.params.dr > 0:
-            layers = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - self.params.dr) for c in layers]
+        if self.params.dr_rnn > 0:
+            layers = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - self.params.dr_rnn) for c in layers]
 
         cells = tf.nn.rnn_cell.MultiRNNCell(layers)
 
-        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len)
+        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float32)
         real_output = tf.reshape(
             tf.gather_nd(outputs,
                          tf.concat([
                              tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
                              tf.reshape(tf.subtract(self.seq_len, 1), [self.params.batch_size, 1])], axis=1)),
             [outputs.shape[0], outputs.shape[-1]])
-        return real_output
+        return real_output, outputs
 
     def get_loss(self):
         """
@@ -137,7 +138,8 @@ class rnn_encoder(basic_rnn):
         """
         with tf.variable_scope("logits", reuse=tf.AUTO_REUSE):
             logits = tf.layers.dense(self.rnn_out, self.params.num_classes)
-            loss = tf.losses.sparse_softmax_cross_entropy(self.ys, logits)
+            losses = tf.losses.sparse_softmax_cross_entropy(self.ys, logits)
+            loss = tf.reduce_sum(losses)
         return logits, loss
 
 

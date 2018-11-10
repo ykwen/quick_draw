@@ -60,24 +60,26 @@ def train_model(X, Y):
     """
     # define parameters here
     batch_size = 256
-    num_iteration = 100000
+    num_iteration = 10000
+    save_every = 50
     verbose = 100
     max_len = 100
     params = tf.contrib.training.HParams(
         batch_size=batch_size,
         max_len=max_len,
         one_input_shape=5,
-        lr=0.001,
+        lr=0.0005,
         opt_name="Adam",
         classifier=True,
         bidir=True,
-        model="./model/rnn_classifier/diff/bidir",
-        best_model="./model/rnn_classifier/diff/best_bidir",
-        summary="./model/rnn_classifier/log/diff/bidir",
+        model="./model/rnn_classifier/same/basic/basic",
+        best_model="./model/rnn_classifier/same/basic/best_basic",
+        summary="./model/rnn_classifier/log/same/basic",
         rnn_node="lstm",
         num_r_n=512,
-        num_r_l=3,
-        dr_rnn=0.2,
+        num_r_l=1,
+        activation=tf.nn.tanh,
+        dr_rnn=0.1,
         num_classes=8,
         restore=False,
         trained_steps=0
@@ -95,7 +97,8 @@ def train_model(X, Y):
             train_x, train_y, _, _, train_len, _ = next(batch_generator)
             train_sum, _ = model.sess.run([model.sum, model.step], feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
             model.summary_writer.add_summary(train_sum, i + params.trained_steps)
-            model.saver.save(model.sess, params.model)
+            if i % save_every == 0 or i == num_iteration - 1:
+                model.saver.save(model.sess, params.model)
             if i % verbose == 0 or i == num_iteration - 1:
                 valid_loss, valid_acc = model.sess.run([model.loss, model.acc],
                                                        feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
@@ -122,10 +125,10 @@ if __name__ == '__main__':
         transformed = transform_to_sketch(file_path, need_to_transform)
         save_transformed(transformed, save_path)
     # load target categories
-    categories = diff_categories
+    categories = sim_categories
     X, Y = [], []
     y_dict, y_dict_reverse = {v: k for k, v in enumerate(categories)}, {k: v for k, v in enumerate(categories)}
-    for c in diff_categories:
+    for c in categories:
         trans = load_one_transformed(save_path + "/" + c + ".npy")
         X = np.concatenate([X, np.array(trans)])
         ind_test = np.random.choice(len(trans), 1)[0]
