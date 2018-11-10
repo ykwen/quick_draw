@@ -1,0 +1,22 @@
+### Traing parameters:
+    batch_size = 256
+    num_iteration = 10000
+    save_every = 50
+    verbose = 100
+    max_len = 100
+    one_input_shape=5,
+    lr=0.0005,
+    opt_name="Adam",
+    classifier=True,
+    bidir=True,
+    model="./model/rnn_classifier/",
+    best_model="./model/rnn_classifier/",
+    summary="./model/rnn_classifier/log/",
+    rnn_node="lstm",
+    num_r_n=512,
+    num_r_l=1,
+    activation=tf.nn.tanh,
+    dr_rnn=0.1,
+    num_classes=8,
+    restore=False,
+    trained_steps=0
