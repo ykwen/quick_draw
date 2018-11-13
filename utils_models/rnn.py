@@ -26,8 +26,9 @@ class basic_rnn:
             global_step=tf.train.get_global_step(),
             learning_rate=self.params.lr,
             optimizer=self.params.opt_name,
-            clip_gradients=None,
-            summaries=["learning_rate", "loss", "gradients", "gradient_norm"])
+            clip_gradients=self.params.clip_gradients,
+            summaries=["learning_rate"]
+        )
 
         if not estimator:
             # define summary and calculate result
@@ -172,7 +173,7 @@ class rnn_decoder(basic_rnn):
             s_ = tf.concat([s0s, self.xs], axis=1)
             helper = tf.contrib.seq2seq.TrainingHelper(
                 inputs=s_,
-                sequence_length=self.params.max_len + 1,
+                sequence_length=self.params.max_len,
                 time_major=False
             )
             return helper
@@ -211,8 +212,8 @@ class rnn_decoder(basic_rnn):
             s0 = tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32)
             helper = tf.contrib.seq2seq.InferenceHelper(
                 sample_fn=_sample_fn,
-                sample_shape=[self.params.input_shape[0], self.params.input_shape[2]],
-                sample_dtype=self.params.input_dtype,
+                sample_shape=[self.params.batch_size, self.params.one_input_shape],
+                sample_dtype=tf.float32,
                 start_inputs=s0,
                 end_fn=_end_fn
             )
@@ -229,7 +230,7 @@ class rnn_decoder(basic_rnn):
         out, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=decoder,
                                                       output_time_major=False,
                                                       impute_finished=True,
-                                                      maximum_iterations=self.params.max_len + 1)
+                                                      maximum_iterations=self.params.max_len)
         if self.params.mode == tf.estimator.ModeKeys.TRAIN:
             # to calculate losses
             mask = tf.tile(
@@ -276,8 +277,8 @@ class rnn_decoder(basic_rnn):
         loss_params = [muxs, muys, sigxs, sigys, cors, weights, qs_]
         L_R = self.reconstruction_loss(loss_params)
         L_kl = self.KL_loss(sigxs, sigys, muxs, muys)
-        kl_w = tf.get_variable(name="kl_loss_weight", shape=[1], dtype=tf.float32)
-        return loss_params, tf.add(L_R, tf.multiply(L_kl, kl_w))
+        kl_w = self.params.w_KL
+        return loss_params, tf.add(L_R, L_kl * kl_w)
 
     def reconstruction_loss(self, loss_params):
         """
@@ -303,5 +304,10 @@ class rnn_decoder(basic_rnn):
     def KL_loss(self, sigxs, sigys, muxs, muys):
         lx = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigxs), tf.add(tf.square(muxs), sigxs))), 2)
         ly = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigys), tf.add(tf.square(muys), sigys))), 2)
-        return tf.add(lx, ly)
+        kl_l = lx + ly
+        if self.params.mode == tf.estimator.ModeKeys.TRAIN:
+            num_step = tf.train.get_global_step()
+            eta_step = 1 - (1 - self.params.eta_min) * (self.params.R ** num_step)
+            kl_l = self.params.w_KL * eta_step * tf.maximum(kl_l, self.params.kl_min)
+        return kl_l
 

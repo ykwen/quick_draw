@@ -51,68 +51,52 @@ def get_batch(X, Y, batch_size=64, validation_rate=0.2, max_seq_len=100):
               train_seq_len[train_indexes], val_seq_len[val_indexes]
 
 
-def train_model(X, Y):
+def train_model(model, params, num_iteration, save_every, verbose, X, Y):
     """
-    as named
-    :param X: features with maxed seq_length
-    :param Y: labels
+    Train the given model with given params
+    :param model: rnn_encoder, rnn_decoder, sktch_rnn, cnn...
+    :param params: model's params
+    :param num_iteration: num_iteration
+    :param save_every: save the model every constant
+    :param verbose: Save the best model or not
+    :param X: input features
+    :param Y: input targets
     :return: trained model
     """
-    # define parameters here
-    batch_size = 256
-    num_iteration = 10000
-    save_every = 50
-    verbose = 100
-    max_len = 100
-    params = tf.contrib.training.HParams(
-        batch_size=batch_size,
-        max_len=max_len,
-        one_input_shape=5,
-        lr=0.0005,
-        opt_name="Adam",
-        classifier=True,
-        bidir=True,
-        model="./model/rnn_classifier/same/basic/basic",
-        best_model="./model/rnn_classifier/same/basic/best_basic",
-        summary="./model/rnn_classifier/log/same/basic",
-        rnn_node="lstm",
-        num_r_n=512,
-        num_r_l=1,
-        activation=tf.nn.tanh,
-        dr_rnn=0.1,
-        num_classes=8,
-        restore=False,
-        trained_steps=0
-    )
-    with tf.device("/GPU:0"):
-        test_summary = tf.Summary()
-        test_summary.value.add(tag='Valid Loss', simple_value=None)
-        test_summary.value.add(tag='Valid Accuracy', simple_value=None)
+    test_summary = tf.Summary()
+    test_summary.value.add(tag='Valid Loss', simple_value=None)
+    test_summary.value.add(tag='Valid Accuracy', simple_value=None)
 
-        model = rnn_encoder(params, estimator=False)
-        # get batches
-        batch_generator = get_batch(X, Y, batch_size=batch_size, max_seq_len=max_len)
-        prev_loss = float("inf")
-        for i in range(num_iteration):
-            train_x, train_y, _, _, train_len, _ = next(batch_generator)
-            train_sum, _ = model.sess.run([model.sum, model.step], feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
-            model.summary_writer.add_summary(train_sum, i + params.trained_steps)
-            if i % save_every == 0 or i == num_iteration - 1:
-                model.saver.save(model.sess, params.model)
-            if i % verbose == 0 or i == num_iteration - 1:
-                valid_loss, valid_acc = model.sess.run([model.loss, model.acc],
-                                                       feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
-                test_summary.value[0].simple_value = valid_loss
-                test_summary.value[1].simple_value = valid_acc
-                model.summary_writer.add_summary(test_summary, i + params.trained_steps)
-                if prev_loss > valid_loss:
-                    model.saver.save(model.sess, params.best_model)
-                    prev_loss = valid_loss
+    # get batches
+    batch_generator = get_batch(X, Y, batch_size=params.batch_size, max_seq_len=params.max_len)
+    prev_loss = float("inf")
+    for i in range(num_iteration):
+        train_x, train_y, val_x, val_y, train_len, val_len = next(batch_generator)
+        train_sum, _ = model.sess.run([model.sum, model.step],
+                                      feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
+        model.summary_writer.add_summary(train_sum, i + params.trained_steps)
+        if i % save_every == 0 or i == num_iteration - 1:
+            model.saver.save(model.sess, params.model)
+        if i % verbose == 0 or i == num_iteration - 1:
+            valid_loss, valid_acc = model.sess.run([model.loss, model.acc],
+                                                   feed_dict={model.xs: val_x, model.ys: val_y,
+                                                              model.seq_len: val_len})
+            test_summary.value[0].simple_value = valid_loss
+            test_summary.value[1].simple_value = valid_acc
+            model.summary_writer.add_summary(test_summary, i + params.trained_steps)
+            if prev_loss > valid_loss:
+                model.saver.save(model.sess, params.best_model)
+                prev_loss = valid_loss
+    return model
 
 
-if __name__ == '__main__':
-    file_path = "./data/simplified"
-    save_path = "./data/transformed"
+def train_encoder_model(file_path, save_path):
+    """
+    Define model parameters and train model
+    :param file_path: data file path
+    :param save_path: transformed data file path
+    :return: trained model
+    """
     # choose 8 categories that are totally different by my interest
     diff_categories = ["cat", "angel", "bench", "dragon", "eyeglasses", "ice cream", "t-shirt", "steak"]
     # choose 8 animals as similar categories in sketch
@@ -125,14 +109,106 @@ if __name__ == '__main__':
         transformed = transform_to_sketch(file_path, need_to_transform)
         save_transformed(transformed, save_path)
     # load target categories
-    categories = sim_categories
+    cates = diff_categories
+    cate_type = "diff"
     X, Y = [], []
-    y_dict, y_dict_reverse = {v: k for k, v in enumerate(categories)}, {k: v for k, v in enumerate(categories)}
-    for c in categories:
+    y_dict, y_dict_reverse = {v: k for k, v in enumerate(cates)}, {k: v for k, v in enumerate(cates)}
+    for c in cates:
         trans = load_one_transformed(save_path + "/" + c + ".npy")
         X = np.concatenate([X, np.array(trans)])
-        ind_test = np.random.choice(len(trans), 1)[0]
         # visualize_one_transformed(trans[ind_test], c)
         Y = np.concatenate([Y, [y_dict[c]] * len(trans)])
 
-    train_model(X, Y)
+    # define parameters here
+    batch_size = 256
+    num_iteration = 20000
+    save_every = 50
+    verbose = 100
+    max_len = 100
+    for model_type in ["bidir"]:
+        for l in range(3, 4):
+            model_layer = model_type + "_{}".format(l)
+            params = tf.contrib.training.HParams(
+                batch_size=batch_size,
+                max_len=max_len,
+                one_input_shape=5,
+                lr=0.0001,
+                clip_gradients=1.0,
+                opt_name="Adam",
+                classifier=True,
+                bidir=model_type == "bidir",
+                model="./model/rnn_classifier/{}/{}/{}".format(cate_type, model_type, model_layer),
+                best_model="./model/rnn_classifier/{}/{}/best_{}".format(cate_type, model_type, model_layer),
+                summary="./model/rnn_classifier/log/{}/{}".format(cate_type, model_layer),
+                rnn_node="lstm",
+                num_r_n=512,
+                num_r_l=l,
+                activation=tf.nn.tanh,
+                dr_rnn=0.1,
+                num_classes=8,
+                restore=False,
+                trained_steps=0
+            )
+            with tf.device("/GPU:0"):
+                tf.reset_default_graph()
+                model = rnn_encoder(params, estimator=False)
+                train_model(model, params, num_iteration, save_every, verbose, X, Y)
+
+
+def train_decoder_model(file_path, save_path, category):
+    """
+    Train one category decoder model at a time
+    :param file_path: data file path
+    :param save_path: transformed data file path
+    :param category: the category
+    :return: trained model
+    """
+    transformed_file = set(os.listdir(save_path))
+    if category + ".npy" not in transformed_file:
+        data = transform_to_sketch(file_path, [category])
+        save_transformed(data, save_path)
+    else:
+        data = load_one_transformed(save_path + "/" + category + ".npy")
+
+    batch_size = 256
+    num_iteration = 10000
+    save_every = 50
+    verbose = 100
+    max_len = 100
+    params = tf.contrib.training.HParams(
+        batch_size=batch_size,
+        max_len=max_len,
+        one_input_shape=5,
+        lr=0.0001,
+        opt_name="Adam",
+        classifier=True,
+        bidir=True,
+        model="./model/rnn_decoder/{}/{}".format(category, category),
+        best_model="./model/rnn_decoder/{}/{}_best".format(category, category),
+        summary="./model/rnn_decoder/log/{}".format(category),
+        rnn_node="lstm",
+        num_r_n=2048,
+        gmm_dim=128,
+        num_r_l=1,
+        activation=tf.nn.tanh,
+        dr_rnn=0.1,
+        num_classes=8,
+        mode=tf.estimator.ModeKeys.TRAIN,
+        temper=1,
+        w_KL=1,
+        eta_min=0.01,
+        R=0.99999,
+        kl_min=0.20,
+        train_with_input=True,
+        restore=False,
+        trained_steps=0
+    )
+
+
+
+if __name__ == '__main__':
+    data_path = "./data/simplified"
+    save_path = "./data/transformed"
+
+    train_encoder_model(data_path, save_path)
+    # train_decoder_model(data_path, save_path, "cat")
