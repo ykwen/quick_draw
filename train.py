@@ -24,16 +24,28 @@ def mask_seq_len(X, max_l):
     return np.stack(X).reshape([X.shape[0], max_l, 5]), np.array(seq_l)
 
 
-def get_batch(X, Y, batch_size=64, validation_rate=0.2, max_seq_len=100):
+def generate_Y(X):
+    """
+    Shift X to generate Y
+    :param X: input (N, 100, 5)
+    :return: shifted input (N, 100, 5)
+    """
+    holder = np.array([0, 0, 0, 0, 1]).reshape([1, 5])
+    return np.concatenate([X[:, 1:, :], np.repeat(holder, len(X), axis=0)], axis=2)
+
+
+def get_batch(X, Y=None, batch_size=64, validation_rate=0.2, max_seq_len=100):
     """
     Batch generator with random and shuffle in the begining
     :param X: features
-    :param Y: labels
+    :param Y: labels, None for decoder
     :param batch_size: as named
     :param validation_rate: as named
     :param max_seq_len: the mean length of points is 45.5, so we set max length to 100
-    :return: generator for batch with sequence length
+    :return: generator for batch with sequence length, if decoder, Y is shifted input
     """
+    if Y is None:
+        Y = generate_Y(X)
     assert len(X) == len(Y)
     N = len(Y)
     val_size = int(validation_rate * N)
@@ -51,7 +63,7 @@ def get_batch(X, Y, batch_size=64, validation_rate=0.2, max_seq_len=100):
               train_seq_len[train_indexes], val_seq_len[val_indexes]
 
 
-def train_model(model, params, num_iteration, save_every, verbose, X, Y):
+def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
     """
     Train the given model with given params
     :param model: rnn_encoder, rnn_decoder, sktch_rnn, cnn...
@@ -151,7 +163,7 @@ def train_encoder_model(file_path, save_path):
             )
             with tf.device("/GPU:0"):
                 tf.reset_default_graph()
-                model = rnn_encoder(params, estimator=False)
+                model = RNNEncoder(params, estimator=False)
                 train_model(model, params, num_iteration, save_every, verbose, X, Y)
 
 
@@ -182,7 +194,7 @@ def train_decoder_model(file_path, save_path, category):
         lr=0.0001,
         opt_name="Adam",
         classifier=True,
-        bidir=True,
+        bidir=False,
         model="./model/rnn_decoder/{}/{}".format(category, category),
         best_model="./model/rnn_decoder/{}/{}_best".format(category, category),
         summary="./model/rnn_decoder/log/{}".format(category),
@@ -199,16 +211,19 @@ def train_decoder_model(file_path, save_path, category):
         eta_min=0.01,
         R=0.99999,
         kl_min=0.20,
-        train_with_input=True,
+        train_with_inputs=True,
         restore=False,
         trained_steps=0
     )
-
+    with tf.device("/GPU:0"):
+        tf.reset_default_graph()
+        model = RNNDecoder(params, decoder=True)
+        train_model(model, params, num_iteration, save_every, verbose, data)
 
 
 if __name__ == '__main__':
     data_path = "./data/simplified"
-    save_path = "./data/transformed"
+    data_save_path = "./data/transformed"
 
-    train_encoder_model(data_path, save_path)
-    # train_decoder_model(data_path, save_path, "cat")
+    # train_encoder_model(data_path, save_path)
+    train_decoder_model(data_path, data_save_path, "cat")

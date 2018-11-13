@@ -4,8 +4,8 @@ from utils_models.utils import bivariate_normal, sample_fn
 
 
 # an basic rnn model for implementing
-class basic_rnn:
-    def __init__(self, params, estimator=False, xs=None, ys=None, lens=None):
+class RNNBasic:
+    def __init__(self, params, estimator=False, xs=None, ys=None, lens=None, decoder=False):
         self.params = params
         if estimator:
             self.xs, self.ys, self.seq_len = xs, ys, lens
@@ -15,7 +15,13 @@ class basic_rnn:
                 self.xs = tf.placeholder(tf.float32,
                                          [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                                          "inputs")
-                self.ys = tf.placeholder(tf.int64, self.params.batch_size, "classes")
+                if decoder:
+                    self.ys = tf.placeholder(
+                        tf.float32,
+                        [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
+                        "shifted_input")
+                else:
+                    self.ys = tf.placeholder(tf.int64, self.params.batch_size, "classes")
                 self.seq_len = tf.placeholder(tf.int32, self.params.batch_size, "sequence_length")
 
         self.rnn_out, self.rnn_out_all = self.get_rnn_layers()
@@ -131,7 +137,7 @@ class basic_rnn:
         raise NotImplementedError("The loss function is not implemented")
 
 
-class rnn_encoder(basic_rnn):
+class RNNEncoder(RNNBasic):
     def get_loss(self):
         """
 
@@ -144,7 +150,10 @@ class rnn_encoder(basic_rnn):
         return logits, loss
 
 
-class rnn_decoder(basic_rnn):
+class RNNDecoder(RNNBasic):
+    def get_bi_rnn(self, cell):
+        raise ValueError("Cannot use bidirection RNN for decoder")
+
     def get_basic_rnn(self, cell):
         """
 
@@ -154,26 +163,14 @@ class rnn_decoder(basic_rnn):
         de_layers = [tf.nn.rnn_cell.BasicLSTMCell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
         de_cells = tf.nn.rnn_cell.MultiRNNCell(de_layers)
 
-        def _get_proj_layer():
-            """
-
-            :return: projection to parameters
-            """
-            return functools.partial(
-                tf.layers.dense, units=6 * self.params.gmm_dim + 3
-            )
-
         def _train_with_inputs_helper():
             """
 
             :return: training helper with given data and types
             """
-            s0 = tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32)
-            s0s = tf.reshape(tf.tile(s0, self.rnn_out.shape[0]), [self.rnn_out.shape[0], 1, s0.shape[0]])
-            s_ = tf.concat([s0s, self.xs], axis=1)
             helper = tf.contrib.seq2seq.TrainingHelper(
-                inputs=s_,
-                sequence_length=self.params.max_len,
+                inputs=self.xs,
+                sequence_length=self.seq_len,
                 time_major=False
             )
             return helper
@@ -223,21 +220,24 @@ class rnn_decoder(basic_rnn):
         else:
             helper = _train_self_helper()
 
-        # output should be [N, 5M+M+3]
-        decoder = tf.contrib.seq2seq.Decoder(cell=de_cells,
-                                             helper=helper,
-                                             output_layer=_get_proj_layer())
+        # output is states, then be projected to [N, 5M+M+3]
+        decoder = tf.contrib.seq2seq.BasicDecoder(cell=de_cells,
+                                                  helper=helper,
+                                                  initial_state=de_cells.zero_state(self.params.batch_size, tf.float32)
+                                                  )
         out, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder=decoder,
                                                       output_time_major=False,
                                                       impute_finished=True,
                                                       maximum_iterations=self.params.max_len)
+        rnn_output = tf.reshape(out.rnn_output, [self.params.batch_size, self.params.max_len, self.params.num_r_n])
+        out = tf.layers.dense(rnn_output, 6 * self.params.gmm_dim + 3, use_bias=False, name="projection")
         if self.params.mode == tf.estimator.ModeKeys.TRAIN:
             # to calculate losses
             mask = tf.tile(
                 tf.expand_dims(tf.sequence_mask(self.seq_len + 1, out.shape[1]), 2),
                 [1, 1, out.shape[2]])
-            return tf.where(mask, out, tf.zeros_like(out))
-        return out
+            return tf.where(mask, out, tf.zeros_like(out)), out
+        return out, rnn_output
 
     def get_loss(self):
         """
@@ -254,15 +254,15 @@ class rnn_decoder(basic_rnn):
         :param de_out: parameters
         :return: loss = reconstruction loss + kl loss * kl weight
         """
-        n, m = self.params.batch_size, self.params.gmm_dim
+        n, l, m = self.params.batch_size, self.params.max_len, self.params.gmm_dim
         # get parameters for normal distribution from outputs
-        muxs = tf.slice(de_out, [0, 0], [n, m])
-        muys = tf.slice(de_out, [0, m], [n, m])
-        sigxs_ = tf.slice(de_out, [0, 2 * m], [n, m])
-        sigys_ = tf.slice(de_out, [0, 3 * m], [n, m])
-        cors_ = tf.slice(de_out, [0, 4 * m], [n, m])
-        weights_ = tf.slice(de_out, [0, 5 * m], [n, m])
-        qs_ = tf.slice(de_out, [0, 6 * m], [n, 3])
+        muxs = tf.slice(de_out, [0, 0, 0], [n, l, m])
+        muys = tf.slice(de_out, [0, 0, m], [n, l, m])
+        sigxs_ = tf.slice(de_out, [0, 0, 2 * m], [n, l, m])
+        sigys_ = tf.slice(de_out, [0, 0, 3 * m], [n, l, m])
+        cors_ = tf.slice(de_out, [0, 0, 4 * m], [n, l, m])
+        weights_ = tf.slice(de_out, [0, 0, 5 * m], [n, l, m])
+        qs_ = tf.slice(de_out, [0, 0, 6 * m], [n, l, 3])
 
         # add randomness
         if self.params.mode != tf.estimator.ModeKeys.TRAIN and self.params.temper:
@@ -283,31 +283,41 @@ class rnn_decoder(basic_rnn):
     def reconstruction_loss(self, loss_params):
         """
 
-        :param loss_params:
+        :param loss_params: [muxs, muys, sigxs, sigys, cors, weights, qs_]
         :return: loss = ls + lp
         """
         qs = loss_params[-1]
-        N_max = tf.reduce_sum(self.seq_len + self.xs.shape[0])
+        N_max = tf.cast(tf.reduce_sum(self.seq_len), tf.float32)
 
-        # Ls, inputs is (N, L, 5), choose the first 2 column
-        deltas = tf.slice(self.xs, [0, 0, 0], [self.xs.shape[0], self.seq_len, 2])
-        norm_sum = bivariate_normal(deltas, loss_params)
-        Ls = (- 1 / N_max) * tf.reduce_sum(tf.log(norm_sum))
+        # Ls, ys is (N, L, 5), choose the first 2 column
+        deltas = tf.slice(self.ys, [0, 0, 0], [self.params.batch_size, self.params.max_len, 2])
+        norm_ = bivariate_normal(deltas, loss_params)
+        mask = tf.tile(
+            tf.expand_dims(tf.sequence_mask(self.seq_len, self.params.max_len), 2),
+            [1, 1, 1])
+        norm_zero_outside = tf.where(mask, norm_, tf.zeros_like(norm_))
+
+        Ls = (- 1 / N_max) * tf.reduce_sum(tf.log(norm_zero_outside))
 
         # Lp
-        ps = tf.reshape(tf.slice(self.xs, [0, 0, 2], [self.xs.shape[0], self.params.max_len, 3]), [-1, 3])
-        qs = tf.reshape(qs, [-1, 3])
-        Lp = (- 1 / N_max) * tf.reduce_sum(tf.losses.softmax_cross_entropy(onehot_labels=ps, logits=qs))
+        ps = tf.slice(self.ys, [0, 0, 2], [self.params.batch_size, self.params.max_len, 3])
+        mask = tf.tile(
+            tf.expand_dims(tf.sequence_mask(self.seq_len, self.params.max_len), 2),
+            [1, 1, 3]
+        )
+        masked_ps, masked_qs = tf.where(mask, ps, tf.zeros_like(ps)), tf.where(mask, qs, tf.zeros_like(qs))
+        Lp_loss = tf.losses.softmax_cross_entropy(onehot_labels=masked_ps, logits=masked_qs)
+        Lp = (- 1 / N_max) * Lp_loss
 
         return tf.add(Ls, Lp)
 
     def KL_loss(self, sigxs, sigys, muxs, muys):
-        lx = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigxs), tf.add(tf.square(muxs), sigxs))), 2)
-        ly = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigys), tf.add(tf.square(muys), sigys))), 2)
+        lx = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1., sigxs), tf.add(tf.square(muxs), sigxs))), 2.)
+        ly = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1., sigys), tf.add(tf.square(muys), sigys))), 2.)
         kl_l = lx + ly
         if self.params.mode == tf.estimator.ModeKeys.TRAIN:
             num_step = tf.train.get_global_step()
-            eta_step = 1 - (1 - self.params.eta_min) * (self.params.R ** num_step)
+            eta_step = 1. - (1. - self.params.eta_min) * (self.params.R ** num_step)
             kl_l = self.params.w_KL * eta_step * tf.maximum(kl_l, self.params.kl_min)
         return kl_l
 
