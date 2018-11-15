@@ -32,7 +32,7 @@ def decode_drawing(drawing):
     """
     features = []
     num_stroke = len(drawing)
-    prev = [0, 0]
+    prev = [drawing[0][0][0], drawing[0][1][0]]
     for ind, s in enumerate(drawing):
         stroke_length = len(s[0])
         for i in range(stroke_length):
