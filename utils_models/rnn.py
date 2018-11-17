@@ -57,9 +57,10 @@ class RNNBasic:
             self.sess = tf.Session(config=config)
             self.sess.run(tf.global_variables_initializer())
 
-            self.sum = tf.summary.merge_all()
-            self.summary_writer = tf.summary.FileWriter(self.params.summary)
-            self.summary_writer.add_graph(self.sess.graph)
+            if self.params.mode == tf.estimator.ModeKeys.TRAIN:
+                self.sum = tf.summary.merge_all()
+                self.summary_writer = tf.summary.FileWriter(self.params.summary)
+                self.summary_writer.add_graph(self.sess.graph)
 
             if self.params.restore:
                 restore = tf.train.Saver()
@@ -202,9 +203,14 @@ class RNNDecoder(RNNBasic):
                 weights_ = tf.transpose(tf.slice(de_out, [0, 5 * m], [n, m]))
                 qs_ = tf.slice(de_out, [0, 6 * m], [n, 3])
 
-                x, y = tf.trace(tf.matmul(muxs, weights_)), tf.trace(tf.matmul(muys, weights_))
-                x, y = tf.reshape(x, [self.params.batch_size, 1]), tf.reshape(y, [self.params.batch_size, 1])
+                x = tf.reshape(tf.matmul(
+                            tf.reshape(muxs, [n, 1, m]), tf.reshape(weights_, [n, m, 1])
+                ), [n, 1])
+                y = tf.reshape(tf.matmul(
+                    tf.reshape(muys, [n, 1, m]), tf.reshape(weights_, [n, m, 1])
+                ), [n, 1])
                 q = tf.one_hot(tf.argmax(qs_, axis=1), 3)
+
                 return tf.concat([x, y, q], axis=1)
 
             def _end_fn(inputs):
@@ -214,9 +220,9 @@ class RNNDecoder(RNNBasic):
                 :return: N boolean of whether its ended
                 """
                 n = self.params.batch_size
-                return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1, tf.int32))
+                return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1., tf.float32))
 
-            s0 = tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32)
+            s0 = tf.tile(tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32), [self.params.batch_size, 1])
             helper = tf.contrib.seq2seq.InferenceHelper(
                 sample_fn=_sample_fn,
                 sample_shape=[self.params.batch_size, self.params.one_input_shape],
