@@ -51,7 +51,10 @@ class RNNBasic:
 
             self.saver = tf.train.Saver()
 
-            self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+            config = tf.ConfigProto(allow_soft_placement=True)
+            config.gpu_options.allow_growth = True
+
+            self.sess = tf.Session(config=config)
             self.sess.run(tf.global_variables_initializer())
 
             self.sum = tf.summary.merge_all()
@@ -287,7 +290,7 @@ class RNNDecoder(RNNBasic):
 
         loss_params = [muxs, muys, sigxs, sigys, cors, weights, qs_]
         l_r = self.reconstruction_loss(loss_params)
-        l_kl = self.KL_loss(sigxs, sigys, muxs, muys)
+        l_kl = self.KL_loss(sigxs_, sigys_, muxs, muys, self.params.gmm_dim)
         kl_w = self.params.w_KL
         return loss_params, tf.add(l_r, l_kl * kl_w)
 
@@ -321,12 +324,12 @@ class RNNDecoder(RNNBasic):
         lp_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=masked_ps, logits=masked_qs)
         lp = (1 / N_max) * tf.reduce_sum(lp_loss)
 
-        # self.Ls, self.Lp, self.loss_par, self.logn = ls, lp, loss_params, log_norm
+        self.Ls, self.Lp, self.loss_par, self.logn = ls, lp, loss_params, log_norm
         return tf.add(ls, lp)
 
-    def KL_loss(self, sigxs, sigys, muxs, muys):
-        lx = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1., sigxs), tf.add(tf.square(muxs), sigxs))), 2.)
-        ly = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1., sigys), tf.add(tf.square(muys), sigys))), 2.)
+    def KL_loss(self, sigxs, sigys, muxs, muys, n_z):
+        lx = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigxs), tf.add(tf.square(muxs), tf.exp(sigxs)))), 2. * n_z)
+        ly = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigys), tf.add(tf.square(muys), tf.exp(sigys)))), 2. * n_z)
         kl_l = lx + ly
         if self.params.mode == tf.estimator.ModeKeys.TRAIN:
             if tf.train.get_global_step():
@@ -336,7 +339,7 @@ class RNNDecoder(RNNBasic):
             eta_step = 1. - (1. - self.params.eta_min) * (self.params.R ** num_step)
             kl_l = self.params.w_KL * eta_step * tf.maximum(kl_l, self.params.kl_min)
 
-        # self.L_kl = kl_l
+        self.L_kl = kl_l
         return kl_l
 
     def bivariate_normal(self, inputs, loss_params):

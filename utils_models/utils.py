@@ -103,11 +103,11 @@ def test_function(model, train_x, train_y, train_len, test_output=True, test_nan
         tes = model.sess.run(model.loss,
                              feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
         if np.isnan(tes):
-            print(model.sess.run([model.logn, model.Ls],
+            print(model.sess.run([model.logn, model.Ls, model.Ls, model.Lp, model.L_kl],
                                  feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len}))
             quit()
         else:
-            prev_t = model.sess.run([model.logn, model.Ls],
+            prev_t = model.sess.run([model.Ls, model.Lp, model.L_kl],
                                     feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
             print(prev_t)
         print("Test takes time {}".format(ti() - timei))

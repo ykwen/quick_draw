@@ -1,8 +1,6 @@
 from utils_models.rnn import *
 from utils_models.utils import test_function
-import numpy as np
 from preprocess import *
-from time import time as ti
 import os
 
 
@@ -89,7 +87,7 @@ def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
     for i in range(num_iteration):
         train_x, train_y, val_x, val_y, train_len, val_len = next(batch_generator)
         # print(train_x.shape, train_y.shape, train_len.shape, val_x.shape)
-        # test_function(model, train_x, train_y, train_len, test_output=True)
+        # test_function(model, train_x, train_y, train_len, test_nan=True)
         # timei = ti()
 
         train_sum, _ = model.sess.run([model.sum, model.step],
@@ -199,7 +197,7 @@ def train_decoder_model(file_path, save_path, category):
     else:
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
-    batch_size = 64
+    batch_size = 256
     num_iteration = 10000
     save_every = 50
     verbose = 100
@@ -208,7 +206,7 @@ def train_decoder_model(file_path, save_path, category):
         batch_size=batch_size,
         max_len=max_len,
         one_input_shape=5,
-        lr=0.00001,
+        lr=0.0001,
         opt_name="Adam",
         classifier=False,
         bidir=False,
@@ -222,7 +220,7 @@ def train_decoder_model(file_path, save_path, category):
         activation=tf.nn.tanh,
         dr_rnn=0.1,
         num_classes=8,
-        clip_gradients=0.1,
+        clip_gradients=1.,
         mode=tf.estimator.ModeKeys.TRAIN,
         temper=1.,
         w_KL=1.,
@@ -244,4 +242,4 @@ if __name__ == '__main__':
     data_save_path = "./data/transformed"
 
     # train_encoder_model(data_path, save_path)
-    train_decoder_model(data_path, data_save_path, "cat")
+    # train_decoder_model(data_path, data_save_path, "panda")
