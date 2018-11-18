@@ -200,8 +200,8 @@ def train_decoder_model(file_path, save_path, category):
     else:
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
-    batch_size = 128
-    num_iteration = 10000
+    batch_size = 64
+    num_iteration = 6000
     save_every = 50
     verbose = 100
     max_len = 100

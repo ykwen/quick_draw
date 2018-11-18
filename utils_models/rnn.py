@@ -46,7 +46,8 @@ class RNNBasic:
             clip_gradients=self.params.clip_gradients,
             learning_rate_decay_fn=functools.partial(
                 tf.train.inverse_time_decay, decay_steps=self.params.decay_step, decay_rate=self.params.decay_rate
-            )
+            ),
+            summaries=["learning_rate"]
         )
 
         if not estimator:
