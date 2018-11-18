@@ -88,6 +88,7 @@ def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
         train_x, train_y, val_x, val_y, train_len, val_len = next(batch_generator)
         # print(train_x.shape, train_y.shape, train_len.shape, val_x.shape)
         # test_function(model, train_x, train_y, train_len, test_nan=True)
+        # quit()
         # timei = ti()
 
         train_sum, _ = model.sess.run([model.sum, model.step],
@@ -160,6 +161,8 @@ def train_encoder_model(file_path, save_path):
                 max_len=max_len,
                 one_input_shape=5,
                 lr=0.0001,
+                decay_step=100,
+                decay_rate=0.25,
                 clip_gradients=1.0,
                 opt_name="Adam",
                 classifier=True,
@@ -197,7 +200,7 @@ def train_decoder_model(file_path, save_path, category):
     else:
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
-    batch_size = 256
+    batch_size = 128
     num_iteration = 10000
     save_every = 50
     verbose = 100
@@ -207,6 +210,8 @@ def train_decoder_model(file_path, save_path, category):
         max_len=max_len,
         one_input_shape=5,
         lr=0.0001,
+        decay_step=100,
+        decay_rate=0.25,
         opt_name="Adam",
         classifier=False,
         bidir=False,
@@ -215,7 +220,7 @@ def train_decoder_model(file_path, save_path, category):
         summary="./model/rnn_decoder/log/{}".format(category),
         rnn_node="lstm",
         num_r_n=2048,
-        gmm_dim=128,
+        gmm_dim=20,
         num_r_l=1,
         activation=tf.nn.tanh,
         dr_rnn=0.1,
@@ -242,4 +247,4 @@ if __name__ == '__main__':
     data_save_path = "./data/transformed"
 
     # train_encoder_model(data_path, save_path)
-    # train_decoder_model(data_path, data_save_path, "panda")
+    train_decoder_model(data_path, data_save_path, "panda")

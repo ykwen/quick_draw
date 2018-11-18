@@ -2,7 +2,8 @@ import tensorflow as tf
 import functools
 import math
 from tensorflow.python.layers.core import Dense
-from utils_models.utils import sample_points
+from utils_models.utils import *
+import functools
 
 
 # an basic rnn model for implementing
@@ -10,17 +11,23 @@ class RNNBasic:
     def __init__(self, params, estimator=False, xs=None, ys=None, lens=None, decoder=False):
         self.params = params
         self.pi = math.pi
+
+        config = tf.ConfigProto(allow_soft_placement=True)
+        config.gpu_options.allow_growth = True
+
+        self.sess = tf.Session(config=config)
+
         if estimator:
             self.xs, self.ys, self.seq_len = xs, ys, lens
         else:
             # if it's not used in estimator, need to define placeholder
             with tf.name_scope("placeholder"):
-                self.xs = tf.placeholder(tf.float32,
+                self.xs = tf.placeholder(tf.float64,
                                          [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                                          "inputs")
                 if decoder:
                     self.ys = tf.placeholder(
-                        tf.float32,
+                        tf.float64,
                         [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                         "shifted_input")
                 else:
@@ -30,33 +37,30 @@ class RNNBasic:
         self.rnn_out, self.rnn_out_all = self.get_rnn_layers()
         self.logits, self.loss = self.get_loss()
 
+        self.global_step = tf.train.get_or_create_global_step()
         self.step = tf.contrib.layers.optimize_loss(
             loss=self.loss,
-            global_step=tf.train.get_global_step(),
+            global_step=self.global_step,
             learning_rate=self.params.lr,
             optimizer=self.params.opt_name,
             clip_gradients=self.params.clip_gradients,
-            summaries=["learning_rate"]
+            learning_rate_decay_fn=functools.partial(
+                tf.train.inverse_time_decay, decay_steps=self.params.decay_step, decay_rate=self.params.decay_rate
+            )
         )
 
         if not estimator:
             # define summary and calculate result
+            tf.summary.scalar('train_loss', self.loss)
             if self.params.classifier:
                 self.preds = tf.argmax(self.logits, axis=1)
                 self.acc = tf.contrib.metrics.accuracy(labels=self.ys,
                                                        predictions=self.preds)
                 tf.summary.scalar('train_accuracy', self.acc)
 
-            tf.summary.scalar('train_loss', self.loss)
-
-            self.saver = tf.train.Saver()
-
-            config = tf.ConfigProto(allow_soft_placement=True)
-            config.gpu_options.allow_growth = True
-
-            self.sess = tf.Session(config=config)
             self.sess.run(tf.global_variables_initializer())
 
+            self.saver = tf.train.Saver()
             if self.params.mode == tf.estimator.ModeKeys.TRAIN:
                 self.sum = tf.summary.merge_all()
                 self.summary_writer = tf.summary.FileWriter(self.params.summary)
@@ -105,7 +109,7 @@ class RNNBasic:
             bw = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - dr) for c in bw]
 
         outputs, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            fw, bw, inputs=self.xs, sequence_length=self.seq_len, dtype=tf.float32
+            fw, bw, inputs=self.xs, sequence_length=self.seq_len, dtype=tf.float64
         )
         # use the final hidden states, output is [N, max_length, D]
         real_out = tf.reshape(
@@ -128,7 +132,7 @@ class RNNBasic:
 
         cells = tf.nn.rnn_cell.MultiRNNCell(layers)
 
-        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float32)
+        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float64)
         real_output = tf.reshape(
             tf.gather_nd(outputs,
                          tf.concat([
@@ -168,11 +172,10 @@ class RNNDecoder(RNNBasic):
         :param cell: a certain type of rnn cell
         :return: decoder outputs
         """
-        if self.params.num_r_l > 1:
-            de_layers = [tf.nn.rnn_cell.BasicLSTMCell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
-            de_cells = tf.nn.rnn_cell.MultiRNNCell(de_layers)
-        else:
-            de_cells = tf.nn.rnn_cell.BasicLSTMCell(self.params.num_r_n)
+        de_cells = tf.contrib.rnn.LayerNormBasicLSTMCell(
+            num_units=self.params.num_r_n,
+            dropout_keep_prob=(1. - self.params.dr_rnn)
+        )
 
         def _train_with_inputs_helper():
             """
@@ -220,13 +223,13 @@ class RNNDecoder(RNNBasic):
                 :return: N boolean of whether its ended
                 """
                 n = self.params.batch_size
-                return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1., tf.float32))
+                return tf.equal(tf.slice(inputs, [0, 4], [n, 1]), tf.constant(1., tf.float64))
 
-            s0 = tf.tile(tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float32), [self.params.batch_size, 1])
+            s0 = tf.tile(tf.constant([[0, 0, 1, 0, 0]], dtype=tf.float64), [self.params.batch_size, 1])
             helper = tf.contrib.seq2seq.InferenceHelper(
                 sample_fn=_sample_fn,
                 sample_shape=[self.params.batch_size, self.params.one_input_shape],
-                sample_dtype=tf.float32,
+                sample_dtype=tf.float64,
                 start_inputs=s0,
                 end_fn=_end_fn
             )
@@ -241,7 +244,7 @@ class RNNDecoder(RNNBasic):
         M = 6 * self.params.gmm_dim + 3
         decoder = tf.contrib.seq2seq.BasicDecoder(cell=de_cells,
                                                   helper=helper,
-                                                  initial_state=de_cells.zero_state(self.params.batch_size, tf.float32),
+                                                  initial_state=de_cells.zero_state(self.params.batch_size, tf.float64),
                                                   output_layer=Dense(M, use_bias=False)
                                                   )
         out, final_len = self.dynamic_decode(decoder=decoder,
@@ -295,10 +298,7 @@ class RNNDecoder(RNNBasic):
             sigxs, sigys = sigxs * t, sigys * t
 
         loss_params = [muxs, muys, sigxs, sigys, cors, weights, qs_]
-        l_r = self.reconstruction_loss(loss_params)
-        l_kl = self.KL_loss(sigxs_, sigys_, muxs, muys, self.params.gmm_dim)
-        kl_w = self.params.w_KL
-        return loss_params, tf.add(l_r, l_kl * kl_w)
+        return loss_params, self.reconstruction_loss(loss_params)
 
     def reconstruction_loss(self, loss_params):
         """
@@ -307,7 +307,7 @@ class RNNDecoder(RNNBasic):
         :return: loss = ls + lp
         """
         qs = loss_params[-1]
-        N_max = tf.cast(tf.reduce_sum(self.seq_len), tf.float32)
+        N_max = self.params.max_len
 
         # Ls, ys is (N, L, 5), choose the first 2 column
         deltas = tf.slice(self.ys, [0, 0, 0], [self.params.batch_size, self.params.max_len, 2])
@@ -318,35 +318,16 @@ class RNNDecoder(RNNBasic):
             [1, 1, 1])
         log_norm_zero_outside = tf.where(mask, log_norm, tf.zeros_like(log_norm))
 
-        ls = (- 1 / N_max) * tf.reduce_sum(log_norm_zero_outside)
+        ls = (- 1 / N_max) * tf.reduce_sum(log_norm_zero_outside) / self.params.batch_size
 
         # Lp
         ps = tf.slice(self.ys, [0, 0, 2], [self.params.batch_size, self.params.max_len, 3])
-        mask = tf.tile(
-            tf.expand_dims(tf.sequence_mask(self.seq_len, self.params.max_len), 2),
-            [1, 1, 3]
-        )
-        masked_ps, masked_qs = tf.where(mask, ps, tf.zeros_like(ps)), tf.where(mask, qs, tf.zeros_like(qs))
-        lp_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=masked_ps, logits=masked_qs)
-        lp = (1 / N_max) * tf.reduce_sum(lp_loss)
 
-        self.Ls, self.Lp, self.loss_par, self.logn = ls, lp, loss_params, log_norm
+        lp_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=ps, logits=qs)
+        lp = (1 / N_max) * tf.reduce_sum(lp_loss) / self.params.batch_size
+
+        self.Ls, self.Lp, self.loss_par, self.logn = ls, lp, loss_params[0], log_norm_zero_outside
         return tf.add(ls, lp)
-
-    def KL_loss(self, sigxs, sigys, muxs, muys, n_z):
-        lx = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigxs), tf.add(tf.square(muxs), tf.exp(sigxs)))), 2. * n_z)
-        ly = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigys), tf.add(tf.square(muys), tf.exp(sigys)))), 2. * n_z)
-        kl_l = lx + ly
-        if self.params.mode == tf.estimator.ModeKeys.TRAIN:
-            if tf.train.get_global_step():
-                num_step = tf.train.get_global_step()
-            else:
-                num_step = 0.
-            eta_step = 1. - (1. - self.params.eta_min) * (self.params.R ** num_step)
-            kl_l = self.params.w_KL * eta_step * tf.maximum(kl_l, self.params.kl_min)
-
-        self.L_kl = kl_l
-        return kl_l
 
     def bivariate_normal(self, inputs, loss_params):
         """
@@ -362,18 +343,18 @@ class RNNDecoder(RNNBasic):
         x, y = tf.slice(inputs, [0, 0, 0], [N, L, 1]), tf.slice(inputs, [0, 0, 1], [N, L, 1])
         x, y = tf.tile(x, [1, 1, M]), tf.tile(y, [1, 1, M])
 
-        x, y, = tf.reshape(x, [-1, 1]), tf.reshape(y, [-1, 1])
+        x, y, cors_1 = tf.reshape(x, [-1, 1]), tf.reshape(y, [-1, 1]), tf.reshape(cors, [-1, 1])
         sigxs_1, sigys_1 = tf.reshape(sigxs, [-1, 1]), tf.reshape(sigys, [-1, 1])
         sigxs_2, sigys_2, cors_2 = tf.square(sigxs_1), tf.square(sigys_1), \
                                   tf.reshape(tf.multiply(tf.multiply(sigxs, sigys), cors), [-1, 1])
 
         # covs = tf.reshape(tf.concat([sigxs_2, cors_, cors_, sigys_2], axis=1), [-1, 2, 2])
-        covs_det = sigxs_2 * sigys_2 - cors_2 * cors_2
+        covs_det = (1 - cors_1 ** 2) * sigxs_2 * sigys_2
         covs_inv = tf.reshape(tf.concat([sigys_2, -cors_2, -cors_2, sigxs_2], axis=1) / covs_det, [-1, 2, 2])
 
         # Calcualte for N*L*M values which is wrong again
         inp = tf.reshape(tf.concat([x - sigxs_1, y - sigys_1], axis=1), [-1, 1, 2])
-        log_Z = tf.reshape(tf.log(2 * self.pi) + 0.5 * covs_det, [-1, 1])
+        log_Z = tf.reshape(tf.cast(tf.log(2 * self.pi), tf.float64) + 0.5 * tf.log(covs_det), [-1, 1])
         tmp_y = tf.reshape(tf.matmul(tf.matmul(inp, covs_inv), tf.transpose(inp, [0, 2, 1])), [-1, 1])
 
         log_p = tf.reshape(-0.5 * tmp_y - log_Z, [N, L, 1, M])

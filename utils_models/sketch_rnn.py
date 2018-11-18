@@ -217,7 +217,19 @@ class sketch_rnn:
 
         return tf.add(Ls, Lp)
 
-    def KL_loss(self, sigxs, sigys, muxs, muys):
-        lx = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigxs), tf.add(tf.square(muxs), sigxs))), 2)
-        ly = -tf.divide(tf.reduce_mean(tf.subtract(tf.add(1, sigys), tf.add(tf.square(muys), sigys))), 2)
-        return tf.add(lx, ly)
+    def KL_loss(self, sigxs, sigys, muxs, muys, n_z):
+        lx = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigxs), tf.add(tf.square(muxs), tf.exp(sigxs)))),
+                        2. * n_z)
+        ly = -tf.divide(tf.reduce_sum(tf.subtract(tf.add(1., sigys), tf.add(tf.square(muys), tf.exp(sigys)))),
+                        2. * n_z)
+        kl_l = lx + ly
+        if self.params.mode == tf.estimator.ModeKeys.TRAIN:
+            if tf.train.get_global_step():
+                num_step = tf.train.get_global_step()
+            else:
+                num_step = 0.
+            eta_step = 1. - (1. - self.params.eta_min) * (self.params.R ** num_step)
+            kl_l = self.params.w_KL * eta_step * tf.maximum(kl_l, self.params.kl_min)
+
+        self.L_kl = kl_l
+        return kl_l

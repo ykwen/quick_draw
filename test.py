@@ -25,7 +25,7 @@ def sample_decoder(model_path, data_save_path, category, num_sample):
         bidir=False,
         rnn_node="lstm",
         num_r_n=2048,
-        gmm_dim=128,
+        gmm_dim=20,
         num_r_l=1,
         activation=tf.nn.tanh,
         dr_rnn=0.1,
@@ -51,7 +51,7 @@ def sample_decoder(model_path, data_save_path, category, num_sample):
 
 
 if __name__ == '__main__':
-    model_path = "./model/rnn_decoder/{}/{}"
+    model_path = "./model/rnn_decoder/{}/{}_best"
     data_save_path = "./data/decoder_sampled/{}_{}"
 
     sample_decoder(model_path, data_save_path, 'cat', 5)
