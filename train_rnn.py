@@ -87,7 +87,8 @@ def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
     for i in range(num_iteration):
         train_x, train_y, val_x, val_y, train_len, val_len = next(batch_generator)
         # print(train_x.shape, train_y.shape, train_len.shape, val_x.shape)
-        # test_function(model, train_x, train_y, train_len, test_nan=True)
+        # prev = None
+        # prev = test_function(model, train_x, train_y, train_len, test_nan=True, prev_t=prev)
         # quit()
         # timei = ti()
 
@@ -153,8 +154,8 @@ def train_encoder_model(file_path, save_path):
     save_every = 50
     verbose = 100
     max_len = 100
-    for model_type in ["bidir"]:
-        for l in range(3, 4):
+    for model_type in ["bidir", "basic"]:
+        for l in range(1, 4):
             model_layer = model_type + "_{}".format(l)
             params = tf.contrib.training.HParams(
                 batch_size=batch_size,
@@ -200,18 +201,16 @@ def train_decoder_model(file_path, save_path, category):
     else:
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
-    batch_size = 64
-    num_iteration = 6000
-    save_every = 50
-    verbose = 100
+    batch_size = 128
+    num_iteration = 3000
+    save_every = 20
+    verbose = 80
     max_len = 100
     params = tf.contrib.training.HParams(
         batch_size=batch_size,
         max_len=max_len,
         one_input_shape=5,
         lr=0.0001,
-        decay_step=100,
-        decay_rate=0.25,
         opt_name="Adam",
         classifier=False,
         bidir=False,

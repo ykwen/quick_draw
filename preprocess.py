@@ -142,12 +142,12 @@ def get_mean_seq_len(data):
 if __name__ == '__main__':
     file_path = "./data/simplified"
     save_path = "./data/transformed"
-    categories = ["cat"]
+    categories = ["panda"]
 
     transformed = transform_to_sketch(file_path, categories)
     save_transformed(transformed, save_path)
 
-    trans = load_one_transformed(save_path + "/" + "cat.npy")
+    trans = load_one_transformed(save_path + "/" + "panda.npy")
 
     contents = check_and_load(file_path, categories)
     for i in range(2):

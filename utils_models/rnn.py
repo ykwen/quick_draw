@@ -44,11 +44,13 @@ class RNNBasic:
             learning_rate=self.params.lr,
             optimizer=self.params.opt_name,
             clip_gradients=self.params.clip_gradients,
+
+        )
+        '''
             learning_rate_decay_fn=functools.partial(
                 tf.train.inverse_time_decay, decay_steps=self.params.decay_step, decay_rate=self.params.decay_rate
             ),
-            summaries=["learning_rate"]
-        )
+        '''
 
         if not estimator:
             # define summary and calculate result
@@ -299,6 +301,7 @@ class RNNDecoder(RNNBasic):
             sigxs, sigys = sigxs * t, sigys * t
 
         loss_params = [muxs, muys, sigxs, sigys, cors, weights, qs_]
+        self.sigxs, self.sigys, self.cor = tf.reduce_mean(sigxs), tf.reduce_mean(sigys), tf.reduce_mean(cors)
         return loss_params, self.reconstruction_loss(loss_params)
 
     def reconstruction_loss(self, loss_params):
@@ -327,7 +330,7 @@ class RNNDecoder(RNNBasic):
         lp_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=ps, logits=qs)
         lp = (1 / N_max) * tf.reduce_sum(lp_loss) / self.params.batch_size
 
-        self.Ls, self.Lp, self.loss_par, self.logn = ls, lp, loss_params[0], log_norm_zero_outside
+        self.ls, self.lp = ls, lp
         return tf.add(ls, lp)
 
     def bivariate_normal(self, inputs, loss_params):
@@ -359,7 +362,10 @@ class RNNDecoder(RNNBasic):
         tmp_y = tf.reshape(tf.matmul(tf.matmul(inp, covs_inv), tf.transpose(inp, [0, 2, 1])), [-1, 1])
 
         log_p = tf.reshape(-0.5 * tmp_y - log_Z, [N, L, 1, M])
+        # mask out nan values
+        log_p = tf.where(tf.is_nan(log_p), tf.zeros_like(log_p), log_p)
 
+        self.lz = tf.reduce_mean(covs_det)
         return tf.reshape(
             tf.matmul(
                 tf.reshape(log_p, [N, L, 1, M]), tf.reshape(weights, [N, L, M, 1])

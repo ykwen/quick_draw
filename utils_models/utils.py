@@ -60,20 +60,20 @@ def sample_points(logits):
     return tf.concat([x, y, q], axis=2)
 
 
-def test_function(model, train_x, train_y, train_len, test_output=True, test_nan=False):
+def test_function(model, train_x, train_y, train_len, test_output=False, test_nan=False, prev_t=None):
     if test_nan:
         timei = ti()
-        tes = model.sess.run(model.loss,
-                             feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
-        if np.isnan(tes):
-            print(model.sess.run([model.logn, model.loss_par, model.Ls, model.Lp],
+        if prev_t and np.isnan(prev_t[0]):
+            np.set_printoptions(threshold=np.nan)
+            print(model.sess.run([model.loss, model.lz, model.sigxs, model.sigys, model.cor],
                                  feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len}))
             quit()
         else:
-            prev_t = model.sess.run([model.logn, model.loss_par, model.Ls, model.Lp],
+            prev_t = model.sess.run([model.loss, model.lz, model.sigxs, model.sigys, model.cor],
                                     feed_dict={model.xs: train_x, model.ys: train_y, model.seq_len: train_len})
             print(prev_t)
         print("Test takes time {}".format(ti() - timei))
+        return prev_t
     if test_output:
         last = None
         try:
