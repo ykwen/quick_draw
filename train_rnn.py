@@ -3,6 +3,8 @@ from utils_models.utils import test_function
 from preprocess import *
 import os
 
+np.random.seed(233)
+
 
 def mask_seq_len(X, max_l):
     """
@@ -34,7 +36,37 @@ def generate_Y(X):
     return np.concatenate([X[:, 1:, :], np.repeat(holder, len(X), axis=0).reshape([len(X), 1, 5])], axis=1)
 
 
-def get_batch(X, Y=None, batch_size=64, validation_rate=0.2, max_seq_len=100):
+def normalize(X):
+    """
+    points normalize
+    :param X: input (N, 100, 5)
+    :return: normalized input (N, 100, 5)
+    """
+    input = X[:, :, :2].reshape([-1, 1])
+    mean = np.mean(input)
+    dev = np.std(input)
+    std_X = (X[:, :, :2] - mean) / dev
+    return np.concatenate([std_X, X[:, :, 2:]], axis=2)
+
+
+def data_augment(X, Y, seq_len):
+    """
+    Augment data by multiplying 1.1 and 0.9 randomly
+    :param X: delta X
+    :param Y: delta Y
+    :param seq_len: seq_length
+    :return: augmented X, Y
+    """
+    assert len(X) == len(Y)
+    N, L = len(X), len(X[0])
+    mask_X = np.random.choice(a=[0.9, 1.1], size=[N, L, 2], p=[0.5, 0.5])
+    mask_Y = np.random.choice(a=[0.9, 1.1], size=[N, L, 2], p=[0.5, 0.5])
+    masked_X, masked_Y = np.multiply(mask_X, X[:, :, :2]), np.multiply(mask_Y, Y[:, :, :2])
+    masked_X, masked_Y = np.concatenate([masked_X, X[:, :, 2:]], axis=2), np.concatenate([masked_Y, Y[:, :, 2:]], axis=2)
+    return np.concatenate([X, masked_X]), np.concatenate([Y, masked_Y]), np.concatenate([seq_len, seq_len])
+
+
+def get_batch(X, Y=None, batch_size=64, validation_rate=0.1, max_seq_len=100, augment=False):
     """
     Batch generator with random and shuffle in the begining
     :param X: features
@@ -42,11 +74,15 @@ def get_batch(X, Y=None, batch_size=64, validation_rate=0.2, max_seq_len=100):
     :param batch_size: as named
     :param validation_rate: as named
     :param max_seq_len: the mean length of points is 45.5, so we set max length to 100
+    :param augment: Whether to augment data with t
     :return: generator for batch with sequence length, if decoder, Y is shifted input
     """
     X, seq_len = mask_seq_len(X, max_seq_len)
+    X = normalize(X)
     if Y is None:
         Y = generate_Y(X)
+    if augment:
+        X, Y, seq_len = data_augment(X, Y, seq_len)
     assert len(X) == len(Y)
     N = len(Y)
     val_size = int(validation_rate * N)
@@ -54,6 +90,7 @@ def get_batch(X, Y=None, batch_size=64, validation_rate=0.2, max_seq_len=100):
     assert val_size >= batch_size
     indexes = np.random.choice(N, N, replace=False)
     X, Y = X[indexes], Y[indexes]
+    assert not (np.any(np.isnan(X)) and np.any(np.isnan(Y)))
     train_x, train_y, val_x, val_y = X[val_size:], Y[val_size:], X[:val_size], Y[:val_size]
     train_seq_len, val_seq_len = seq_len[val_size:], seq_len[:val_size]
     while True:
@@ -63,7 +100,7 @@ def get_batch(X, Y=None, batch_size=64, validation_rate=0.2, max_seq_len=100):
               train_seq_len[train_indexes], val_seq_len[val_indexes]
 
 
-def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
+def train_model(model, params, num_iteration, save_every, verbose, X, Y=None, augment=False):
     """
     Train the given model with given params
     :param model: rnn_encoder, rnn_decoder, sktch_rnn, cnn...
@@ -81,13 +118,13 @@ def train_model(model, params, num_iteration, save_every, verbose, X, Y=None):
         test_summary.value.add(tag='Valid Accuracy', simple_value=None)
 
     # get batches
-    batch_generator = get_batch(X, Y, batch_size=params.batch_size, max_seq_len=params.max_len)
+    batch_generator = get_batch(X, Y, batch_size=params.batch_size, max_seq_len=params.max_len, augment=augment)
     prev_loss = float("inf")
 
+    prev = None
     for i in range(num_iteration):
         train_x, train_y, val_x, val_y, train_len, val_len = next(batch_generator)
         # print(train_x.shape, train_y.shape, train_len.shape, val_x.shape)
-        # prev = None
         # prev = test_function(model, train_x, train_y, train_len, test_nan=True, prev_t=prev)
         # quit()
         # timei = ti()
@@ -202,9 +239,9 @@ def train_decoder_model(file_path, save_path, category):
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
     batch_size = 128
-    num_iteration = 3000
+    num_iteration = 30000
     save_every = 20
-    verbose = 80
+    verbose = 40
     max_len = 100
     params = tf.contrib.training.HParams(
         batch_size=batch_size,
@@ -238,7 +275,7 @@ def train_decoder_model(file_path, save_path, category):
     with tf.device("/GPU:0"):
         tf.reset_default_graph()
         model = RNNDecoder(params, decoder=True)
-        train_model(model, params, num_iteration, save_every, verbose, data)
+        train_model(model, params, num_iteration, save_every, verbose, data, augment=True)
 
 
 if __name__ == '__main__':
@@ -246,4 +283,4 @@ if __name__ == '__main__':
     data_save_path = "./data/transformed"
 
     # train_encoder_model(data_path, save_path)
-    train_decoder_model(data_path, data_save_path, "panda")
+    train_decoder_model(data_path, data_save_path, "cat")

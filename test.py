@@ -54,4 +54,4 @@ if __name__ == '__main__':
     model_path = "./model/rnn_decoder/{}/{}_best"
     data_save_path = "./data/decoder_sampled/{}_{}"
 
-    sample_decoder(model_path, data_save_path, 'cat', 5)
+    sample_decoder(model_path, data_save_path, 'panda', 5)

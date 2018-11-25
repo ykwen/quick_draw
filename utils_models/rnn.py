@@ -44,7 +44,7 @@ class RNNBasic:
             learning_rate=self.params.lr,
             optimizer=self.params.opt_name,
             clip_gradients=self.params.clip_gradients,
-
+            summaries=[]
         )
         '''
             learning_rate_decay_fn=functools.partial(
@@ -215,7 +215,7 @@ class RNNDecoder(RNNBasic):
                 y = tf.reshape(tf.matmul(
                     tf.reshape(muys, [n, 1, m]), tf.reshape(weights_, [n, m, 1])
                 ), [n, 1])
-                q = tf.one_hot(tf.argmax(qs_, axis=1), 3)
+                q = tf.one_hot(tf.argmax(qs_, axis=1), 3, dtype=tf.float64)
 
                 return tf.concat([x, y, q], axis=1)
 
@@ -297,11 +297,11 @@ class RNNDecoder(RNNBasic):
         weights = tf.nn.softmax(weights_, axis=2)
         sigxs, sigys, cors = tf.exp(sigxs_), tf.exp(sigys_), tf.nn.tanh(cors_)
         if self.params.mode != tf.estimator.ModeKeys.TRAIN and self.params.temper:
-            t = tf.sqrt(self.params.temper)
+            t = tf.cast(tf.sqrt(self.params.temper), tf.float64)
             sigxs, sigys = sigxs * t, sigys * t
 
         loss_params = [muxs, muys, sigxs, sigys, cors, weights, qs_]
-        self.sigxs, self.sigys, self.cor = tf.reduce_mean(sigxs), tf.reduce_mean(sigys), tf.reduce_mean(cors)
+        # self.sigxs, self.sigys, self.cor = tf.reduce_mean(sigxs), tf.reduce_mean(sigys), tf.reduce_mean(cors)
         return loss_params, self.reconstruction_loss(loss_params)
 
     def reconstruction_loss(self, loss_params):
@@ -317,12 +317,13 @@ class RNNDecoder(RNNBasic):
         deltas = tf.slice(self.ys, [0, 0, 0], [self.params.batch_size, self.params.max_len, 2])
         log_norm = self.bivariate_normal(deltas, loss_params)
 
+        # first mask sequence length, then mask nan values
         mask = tf.tile(
             tf.expand_dims(tf.sequence_mask(self.seq_len, self.params.max_len), 2),
             [1, 1, 1])
-        log_norm_zero_outside = tf.where(mask, log_norm, tf.zeros_like(log_norm))
+        log_n_zero_out = tf.where(mask, log_norm, tf.zeros_like(log_norm))
 
-        ls = (- 1 / N_max) * tf.reduce_sum(log_norm_zero_outside) / self.params.batch_size
+        ls = (- 1 / N_max) * tf.reduce_sum(log_n_zero_out) / self.params.batch_size
 
         # Lp
         ps = tf.slice(self.ys, [0, 0, 2], [self.params.batch_size, self.params.max_len, 3])
@@ -330,7 +331,7 @@ class RNNDecoder(RNNBasic):
         lp_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=ps, logits=qs)
         lp = (1 / N_max) * tf.reduce_sum(lp_loss) / self.params.batch_size
 
-        self.ls, self.lp = ls, lp
+        # self.ls, self.ls_ze, self.lp = ls, tf.reduce_sum(tf.where(tf.is_nan(log_norm_zero_outside), tf.ones_like(log_norm_zero_outside), tf.zeros_like(log_norm_zero_outside))), lp
         return tf.add(ls, lp)
 
     def bivariate_normal(self, inputs, loss_params):
@@ -362,10 +363,7 @@ class RNNDecoder(RNNBasic):
         tmp_y = tf.reshape(tf.matmul(tf.matmul(inp, covs_inv), tf.transpose(inp, [0, 2, 1])), [-1, 1])
 
         log_p = tf.reshape(-0.5 * tmp_y - log_Z, [N, L, 1, M])
-        # mask out nan values
-        log_p = tf.where(tf.is_nan(log_p), tf.zeros_like(log_p), log_p)
 
-        self.lz = tf.reduce_mean(covs_det)
         return tf.reshape(
             tf.matmul(
                 tf.reshape(log_p, [N, L, 1, M]), tf.reshape(weights, [N, L, M, 1])
