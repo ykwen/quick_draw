@@ -3,6 +3,7 @@ import functools
 import math
 from tensorflow.python.layers.core import Dense
 from utils_models.utils import *
+from utils_models.hyper_cells import *
 import functools
 
 
@@ -22,12 +23,12 @@ class RNNBasic:
         else:
             # if it's not used in estimator, need to define placeholder
             with tf.name_scope("placeholder"):
-                self.xs = tf.placeholder(tf.float64,
+                self.xs = tf.placeholder(self.params.d_type,
                                          [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                                          "inputs")
                 if decoder:
                     self.ys = tf.placeholder(
-                        tf.float64,
+                        self.params.d_type,
                         [self.params.batch_size, self.params.max_len, self.params.one_input_shape],
                         "shifted_input")
                 else:
@@ -38,6 +39,7 @@ class RNNBasic:
         self.logits, self.loss = self.get_loss()
 
         self.global_step = tf.train.get_or_create_global_step()
+
         self.step = tf.contrib.layers.optimize_loss(
             loss=self.loss,
             global_step=self.global_step,
@@ -84,6 +86,8 @@ class RNNBasic:
                 cell = tf.nn.rnn_cell.BasicLSTMCell
             elif node == 'gru':
                 cell = tf.nn.rnn_cell.GRUCell
+            elif node == 'hyper_lstm':
+                cell = HyperLSTMCell
             else:
                 cell = tf.nn.rnn_cell.BasicRNNCell
             return functools.partial(cell, activation=self.params.activation)
@@ -175,10 +179,25 @@ class RNNDecoder(RNNBasic):
         :param cell: a certain type of rnn cell
         :return: decoder outputs
         """
-        de_cells = tf.contrib.rnn.LayerNormBasicLSTMCell(
-            num_units=self.params.num_r_n,
-            dropout_keep_prob=(1. - self.params.dr_rnn)
-        )
+        node = self.params.rnn_node
+        if node == 'hyper_lstm':
+            de_cells = HyperLSTMCell(num_units_main=self.params.num_r_m,
+                                     num_units_hyper=self.params.num_r_h,
+                                     dim_z=self.params.dim_z,
+                                     dtype=self.params.d_type)
+            '''
+            de_cells = HyperLSTMCell(
+                num_units_main=self.params.num_r_m,
+                num_units_hyper=self.params.num_r_h,
+                dim_z=self.params.dim_z,
+                keep_prob=(1. - self.params.dr_rnn),
+                dtype=self.params.d_type
+            )'''
+        else:
+            de_cells = tf.contrib.rnn.LayerNormBasicLSTMCell(
+                num_units=self.params.num_r_n,
+                dropout_keep_prob=(1. - self.params.dr_rnn)
+            )
 
         def _train_with_inputs_helper():
             """
