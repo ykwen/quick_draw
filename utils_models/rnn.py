@@ -185,14 +185,14 @@ class RNNDecoder(RNNBasic):
                                      num_units_hyper=self.params.num_r_h,
                                      dim_z=self.params.dim_z,
                                      dtype=self.params.d_type)
-            '''
-            de_cells = HyperLSTMCell(
+        elif node == 'hyper_lstm_eff':
+            de_cells = HyperLSTMCell_Efficient(
                 num_units_main=self.params.num_r_m,
                 num_units_hyper=self.params.num_r_h,
                 dim_z=self.params.dim_z,
                 keep_prob=(1. - self.params.dr_rnn),
                 dtype=self.params.d_type
-            )'''
+            )
         else:
             de_cells = tf.contrib.rnn.LayerNormBasicLSTMCell(
                 num_units=self.params.num_r_n,

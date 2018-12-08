@@ -67,7 +67,7 @@ class HyperLSTMCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope("cal_Z"):
             self.w_hhs = tf.get_variable(name="W_y_h_hat",
                                          shape=[self.num_hyper, self.dim_z * 3 * 4],
-                                         initializer=tf.zeros_initializer(), dtype=self.d_type)
+                                         initializer=tf.orthogonal_initializer(), dtype=self.d_type)
             self.b_hhs = tf.get_variable(name="b_y_h_hat",
                                          shape=[4, self.dim_z * 2],
                                          initializer=tf.zeros_initializer(),
@@ -76,15 +76,15 @@ class HyperLSTMCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope("cal_final_W"):
             self.w_hz = tf.get_variable(name="W_y_hz",
                                         shape=[4, self.num_main, self.dim_z, self.num_hyper],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_xz = tf.get_variable(name="W_y_xz",
                                         shape=[4, self.num_main, self.dim_z, self.inputs_dim],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_bz = tf.get_variable(name="W_y_bz",
                                         shape=[4, self.num_main, self.dim_z],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.b0 = tf.get_variable(name="W_y_b",
                                       shape=[4, self.num_main],
@@ -221,7 +221,7 @@ class HyperLSTMCell_Efficient(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope("cal_Z"):
             self.w_hhs = tf.get_variable(name="W_y_h_hat",
                                          shape=[self.num_hyper, self.dim_z * 3 * 4],
-                                         initializer=tf.zeros_initializer(), dtype=self.d_type)
+                                         initializer=tf.orthogonal_initializer(), dtype=self.d_type)
             self.b_hhs = tf.get_variable(name="b_y_h_hat",
                                          shape=[4, self.dim_z * 2],
                                          initializer=tf.zeros_initializer(),
@@ -230,23 +230,23 @@ class HyperLSTMCell_Efficient(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope("cal_final_W"):
             self.w_hz = tf.get_variable(name="W_y_hz",
                                         shape=[4, self.dim_z, self.num_main],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_xz = tf.get_variable(name="W_y_xz",
                                         shape=[4, self.dim_z, self.num_main],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_bz = tf.get_variable(name="W_y_bz",
                                         shape=[4, self.dim_z, self.num_main],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_yh = tf.get_variable(name="W_y_h",
                                         shape=[4, self.num_hyper, self.num_main],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
             self.w_yx = tf.get_variable(name="W_y_x",
                                         shape=[4, self.inputs_dim, self.num_main],
-                                        initializer=tf.zeros_initializer(),
+                                        initializer=tf.orthogonal_initializer(),
                                         dtype=self.d_type)
 
         self.built = True
@@ -292,7 +292,7 @@ class HyperLSTMCell_Efficient(tf.nn.rnn_cell.RNNCell):
 
             dyh, dyx, by = tf.matmul(zyh, self.w_hz[i]), tf.matmul(zyh, self.w_xz[i]), tf.matmul(zyb, self.w_bz[i])
 
-            y = dyh * tf.matmul(h_hat_, self.w_yh) + dyx * tf.matmul(inputs, self.w_yx) + by
+            y = dyh * tf.matmul(h_hat_, self.w_yh[i]) + dyx * tf.matmul(inputs, self.w_yx[i]) + by
             ys.append(bn(y))
 
         i, g, f, o = ys
