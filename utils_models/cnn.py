@@ -19,21 +19,21 @@ class ResNet_18:
         # define layers
         with tf.variable_scope('layers', reuse=tf.AUTO_REUSE):
             # conv->maxpool->conv*2->conv*2->conv*2->conv*2>GAP>output
-            self.conv1 = tf.layers.conv2d(self.xs, filters=64, kernel_size=3, strides=1, padding='same', name='conv1')
+            self.conv1 = tf.layers.conv2d(self.xs, filters=32, kernel_size=3, strides=1, padding='same', name='conv1')
             self.max1 = tf.layers.max_pooling2d(self.conv1, pool_size=2, strides=2, padding='same', name='max1')
-            self.w_, self.c_ = 14, 64
-            self.conv2 = self.conv_unit(x_in=self.max1, num_conv=64, ker_size=3, index=2, begin_new=False)
-            self.conv2 = self.conv_unit(x_in=self.conv2, num_conv=64, ker_size=3, index=3, begin_new=False)
-            self.conv3 = self.conv_unit(self.conv2, 128, 3, 4, True)
-            self.conv3 = self.conv_unit(self.conv3, 128, 3, 5, False)
-            self.conv4 = self.conv_unit(self.conv3, 256, 3, 6, True, True)
-            self.conv4 = self.conv_unit(self.conv4, 256, 3, 7, False)
-            self.conv5 = self.conv_unit(self.conv4, 512, 3, 8, True)
-            self.conv5 = self.conv_unit(self.conv5, 512, 3, 9, False)
+            self.w_, self.c_ = 14, 32
+            self.conv2 = self.conv_unit(x_in=self.max1, num_conv=32, ker_size=3, index=2, begin_new=False)
+            self.conv2 = self.conv_unit(x_in=self.conv2, num_conv=32, ker_size=3, index=3, begin_new=False)
+            self.conv3 = self.conv_unit(self.conv2, 64, 3, 4, True)
+            self.conv3 = self.conv_unit(self.conv3, 64, 3, 5, False)
+            self.conv4 = self.conv_unit(self.conv3, 128, 3, 6, True, True)
+            self.conv4 = self.conv_unit(self.conv4, 128, 3, 7, False)
+            self.conv5 = self.conv_unit(self.conv4, 256, 3, 8, True)
+            self.conv5 = self.conv_unit(self.conv5, 256, 3, 9, False)
 
             self.glo_ave_pool = tf.reduce_mean(self.conv5, axis=[1, 2])
 
-            self.final_out = tf.layers.dense(self.glo_ave_pool, 1000, activation=tf.nn.relu, name='FC')
+            self.final_out = tf.layers.dense(self.glo_ave_pool, 200, activation=tf.nn.relu, name='FC')
             self.logits = tf.layers.dense(self.final_out, num_class, name='logits')
 
         with tf.variable_scope('loss', reuse=tf.AUTO_REUSE):

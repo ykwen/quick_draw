@@ -1,5 +1,6 @@
 from utils_models.rnn import *
 from utils_models.utils import test_function
+from utils_models.sketch_rnn import sketch_rnn
 from preprocess import *
 import os
 
@@ -282,9 +283,80 @@ def train_decoder_model(file_path, save_path, category):
         train_model(model, params, num_iteration, save_every, verbose, data, augment=True)
 
 
+def train_sketch_rnn(file_path, save_path, cate_type):
+    """
+    Train one category decoder model at a time
+    :param file_path: data file path
+    :param save_path: transformed data file path
+    :param cate_type: the category type
+    :return: trained model
+    """
+    # choose 8 categories that are totally different by my interest
+    diff_categories = ["cat", "angel", "bench", "dragon", "eyeglasses", "ice cream", "t-shirt", "steak"]
+    # choose 8 animals as similar categories in sketch
+    sim_categories = ["bear", "bird", "cat", "duck", "giraffe", "monkey", "panda", "penguin"]
+    if cate_type == "diff":
+        category = diff_categories
+    else:
+        category = sim_categories
+
+    X, Y = [], []
+    y_dict, y_dict_reverse = {v: k for k, v in enumerate(category)}, {k: v for k, v in enumerate(category)}
+    for c in category:
+        trans = load_one_transformed(save_path + "/" + c + ".npy")
+        X = np.concatenate([X, np.array(trans)])
+        # visualize_one_transformed(trans[ind_test], c)
+        Y = np.concatenate([Y, [y_dict[c]] * len(trans)])
+
+    batch_size = 64
+    num_iteration = 10000
+    save_every = 10
+    verbose = 30
+    max_len = 100
+    params = tf.contrib.training.HParams(
+        batch_size=batch_size,
+        max_len=max_len,
+        one_input_shape=5,
+        lr=0.001,
+        opt_name="Adam",
+        classifier=False,
+        bidir=True,
+        model="./model/sketch_rnn/{}_sketch/{}".format(cate_type, cate_type),
+        best_model="./model/sketch_rnn/{}_sketch/{}_best".format(cate_type, cate_type),
+        summary="./model/sketch_rnn/log/{}_sketch".format(cate_type),
+        rnn_node="hyper_lstm_eff",
+        num_r_n=2048,
+        dim_z=512,
+        num_r_m=512,
+        num_r_h=128,
+        dim_z_hyper=32,
+        gmm_dim=20,
+        num_r_l=1,
+        d_type=tf.float64,
+        activation=tf.nn.tanh,
+        dr_rnn=0.1,
+        num_classes=8,
+        clip_gradients=1.,
+        mode=tf.estimator.ModeKeys.TRAIN,
+        temper=1.,
+        w_KL=1.,
+        eta_min=0.01,
+        R=0.99999,
+        kl_min=0.20,
+        train_with_inputs=True,
+        restore=False,
+        trained_steps=0
+    )
+    with tf.device("/GPU:0"):
+        tf.reset_default_graph()
+        model = sketch_rnn(params)
+        train_model(model, params, num_iteration, save_every, verbose, data, augment=True)
+
+
 if __name__ == '__main__':
     data_path = "./data/simplified"
     data_save_path = "./data/transformed"
 
     # train_encoder_model(data_path, save_path)
-    train_decoder_model(data_path, data_save_path, "cat")
+    # train_decoder_model(data_path, data_save_path, "cat")
+    train_sketch_rnn(data_path, data_save_path, "diff")

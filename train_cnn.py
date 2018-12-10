@@ -10,7 +10,7 @@ def load_png_py(path, categories, cate_dict):
     for c in categories:
         pngs = np.load(path + "/" + c + ".npy")
         n = len(pngs)
-        pngs.reshape([n, 28, 28])
+        pngs = pngs.reshape([n, 28, 28, 1])
         label = np.repeat(cate_dict[c], len(pngs))
         data.append((pngs, label))
     return data
@@ -21,7 +21,7 @@ def get_batch(data, size, valid_rate):
     for d in data:
         X.append(d[0]), Y.append(d[1])
     assert len(X) == len(Y)
-
+    X, Y = np.concatenate(X), np.concatenate(Y)
     N, num_reshuffle, count, valid_size = len(X), int(len(X) / size), int(len(X) / size), int(len(X) * valid_rate)
     assert valid_size >= size
 
@@ -65,6 +65,7 @@ def train_cnn(data, cate_type):
                 best_model="./model/cnn_classifier/{}/{}".format(cate_type, cnn_type,),
                 summary="./model/cnn_classifier/log/{}".format(cate_type, cnn_type),
                 dr_rnn=0.1,
+                mode=tf.estimator.ModeKeys.TRAIN,
                 num_classes=8,
                 restore=False,
                 trained_steps=0
