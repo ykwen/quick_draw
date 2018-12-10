@@ -139,11 +139,30 @@ def get_mean_seq_len(data):
     return np.mean(l)
 
 
+def transform_to_png(file_path, categories, save_path):
+    contents = check_and_load(file_path, categories)
+    my_dpi = 96
+    for one_cate in contents:
+        label = one_cate[0]["word"]
+        if label not in set(os.listdir(save_path)):
+            os.makedirs("{}/{}".format(save_path, label))
+        for i, c in enumerate(one_cate):
+            drawing = c["drawing"]
+            fig = plt.figure(frameon=False)
+            fig.set_size_inches(0.5, 0.5)
+            ax = plt.Axes(fig, [0., 0., 1., 1.])
+            ax.set_axis_off()
+            fig.add_axes(ax)
+            for x, y in drawing:
+                plt.plot(x, y, color='black')
+            plt.savefig("{}/{}/{}".format(save_path, label, i))
+
+
 if __name__ == '__main__':
     file_path = "./data/simplified"
     save_path = "./data/transformed"
-    categories = ["panda"]
-
+    categories = ["cat"]
+    '''
     transformed = transform_to_sketch(file_path, categories)
     save_transformed(transformed, save_path)
 
@@ -152,7 +171,6 @@ if __name__ == '__main__':
     contents = check_and_load(file_path, categories)
     for i in range(2):
         visualize_one_transformed(trans[i])
-        visualize_one_picture(contents[0][i]["drawing"])
+        visualize_one_picture(contents[0][i]["drawing"])'''
+    transform_to_png(file_path, categories, "./data/png")
 
-    length = len(contents[0][0]["drawing"][0][0])
-    print(length, transformed[0][0][0][length-3: length+1], contents[0][0]["drawing"])

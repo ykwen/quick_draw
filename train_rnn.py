@@ -239,7 +239,7 @@ def train_decoder_model(file_path, save_path, category):
         data = load_one_transformed(save_path + "/" + category + ".npy")
 
     batch_size = 64
-    num_iteration = 6000
+    num_iteration = 10000
     save_every = 10
     verbose = 30
     max_len = 100
@@ -251,13 +251,13 @@ def train_decoder_model(file_path, save_path, category):
         opt_name="Adam",
         classifier=False,
         bidir=False,
-        model="./model/rnn_decoder/{}_hyper_eff/{}".format(category, category),
-        best_model="./model/rnn_decoder/{}_hyper_eff/{}_best".format(category, category),
-        summary="./model/rnn_decoder/log/{}_hyper_eff".format(category),
-        rnn_node="hyper_lstm_eff",
-        num_r_m=1024,
-        num_r_h=256,
-        dim_z=64,
+        model="./model/rnn_decoder/{}_hyper_small/{}".format(category, category),
+        best_model="./model/rnn_decoder/{}_hyper_small/{}_best".format(category, category),
+        summary="./model/rnn_decoder/log/{}_hyper_small".format(category),
+        rnn_node="hyper_lstm",
+        num_r_m=256,
+        num_r_h=64,
+        dim_z=16,
         d_type=tf.float64,
         # num_r_n=2048,
         gmm_dim=20,
