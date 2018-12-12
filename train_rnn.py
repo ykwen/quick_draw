@@ -300,13 +300,13 @@ def train_sketch_rnn(file_path, save_path, cate_type):
     else:
         category = sim_categories
 
-    X, Y = [], []
-    y_dict, y_dict_reverse = {v: k for k, v in enumerate(category)}, {k: v for k, v in enumerate(category)}
+    data = None
     for c in category:
         trans = load_one_transformed(save_path + "/" + c + ".npy")
-        X = np.concatenate([X, np.array(trans)])
-        # visualize_one_transformed(trans[ind_test], c)
-        Y = np.concatenate([Y, [y_dict[c]] * len(trans)])
+        if data is not None:
+            data = np.concatenate([data, np.array(trans)])
+        else:
+            data = trans
 
     batch_size = 64
     num_iteration = 10000
@@ -324,11 +324,12 @@ def train_sketch_rnn(file_path, save_path, cate_type):
         model="./model/sketch_rnn/{}_sketch/{}".format(cate_type, cate_type),
         best_model="./model/sketch_rnn/{}_sketch/{}_best".format(cate_type, cate_type),
         summary="./model/sketch_rnn/log/{}_sketch".format(cate_type),
-        rnn_node="hyper_lstm_eff",
-        num_r_n=2048,
+        encoder_node="lstm",
+        decoder_node="hyper_lstm_eff",
+        num_r_n=1024,
         dim_z=512,
         num_r_m=512,
-        num_r_h=128,
+        num_r_h=256,
         dim_z_hyper=32,
         gmm_dim=20,
         num_r_l=1,
@@ -350,7 +351,7 @@ def train_sketch_rnn(file_path, save_path, cate_type):
     with tf.device("/GPU:0"):
         tf.reset_default_graph()
         model = sketch_rnn(params)
-        train_model(model, params, num_iteration, save_every, verbose, data, augment=True)
+        train_model(model, params, num_iteration, save_every, verbose, data, augment=False)
 
 
 if __name__ == '__main__':

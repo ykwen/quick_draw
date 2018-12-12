@@ -68,17 +68,19 @@ class sketch_rnn:
 
     def get_rnn_layers(self):
         """
-        Encoder
-        :return:
+        Encoder -> Z vector -> decoder. Parameters are in self.params
+        :return: decoder output
         """
         def _get_rnn_cell():
-            node = self.params.rnn_node
+            """
+            Get encoder cells
+            :return: cell with activation function
+            """
+            node = self.params.encoder_node
             if node == 'lstm':
                 cell = tf.nn.rnn_cell.BasicLSTMCell
             elif node == 'gru':
                 cell = tf.nn.rnn_cell.GRUCell
-            elif node == 'hyper_lstm':
-                cell = HyperLSTMCell
             else:
                 cell = tf.nn.rnn_cell.BasicRNNCell
             return functools.partial(cell, activation=self.params.activation)
@@ -96,6 +98,27 @@ class sketch_rnn:
 
         with tf.variable_scope("decoder"):
             return self.get_decoder(z)
+
+    def get_basic_rnn(self, cell):
+        """
+        return output of single direction rnn
+        :param cell: a certain type of rnn cell
+        :return: output of length of single direction rnn cell
+        """
+        layers = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
+        if self.params.dr_rnn > 0:
+            layers = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - self.params.dr_rnn) for c in layers]
+
+        cells = tf.nn.rnn_cell.MultiRNNCell(layers)
+
+        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float64)
+        real_output = tf.reshape(
+            tf.gather_nd(outputs,
+                         tf.concat([
+                             tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
+                             tf.reshape(tf.subtract(self.seq_len, 1), [self.params.batch_size, 1])], axis=1)),
+            [outputs.shape[0], outputs.shape[-1]])
+        return real_output, outputs
 
     def get_bi_rnn(self, cell):
         """
@@ -124,28 +147,12 @@ class sketch_rnn:
             [outputs.shape[0], outputs.shape[-1]])
         return real_out, outputs
 
-    def get_basic_rnn(self, cell):
-        """
-        return output of single direction rnn
-        :param cell: a certain type of rnn cell
-        :return: output of length of single direction rnn cell
-        """
-        layers = [cell(self.params.num_r_n) for _ in range(self.params.num_r_l)]
-        if self.params.dr_rnn > 0:
-            layers = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - self.params.dr_rnn) for c in layers]
-
-        cells = tf.nn.rnn_cell.MultiRNNCell(layers)
-
-        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float64)
-        real_output = tf.reshape(
-            tf.gather_nd(outputs,
-                         tf.concat([
-                             tf.reshape(tf.range(self.params.batch_size), [self.params.batch_size, 1]),
-                             tf.reshape(tf.subtract(self.seq_len, 1), [self.params.batch_size, 1])], axis=1)),
-            [outputs.shape[0], outputs.shape[-1]])
-        return real_output, outputs
-
     def get_z(self, inputs):
+        """
+        Calculate mu and theta for decoder from encoder output
+        :param inputs: encoder final output
+        :return: Z vectors
+        """
         bidir = 1 + int(self.params.bidir)
         w_mu = tf.get_variable("w_mu", [self.params.num_r_n * bidir, self.params.dim_z], self.params.d_type)
         b_mu = tf.get_variable("b_mu", [self.params.dim_z], self.params.d_type)
@@ -155,8 +162,10 @@ class sketch_rnn:
         mu = tf.matmul(inputs, w_mu) + b_mu
         theta = tf.exp((tf.matmul(inputs, w_theta) + b_theta) / 2)
         rand = tf.random.normal([self.params.batch_size, self.params.dim_z], dtype=self.params.d_type)
-
-        return mu + theta * rand
+        if self.params.mode == tf.estimator.ModeKeys.TRAIN:
+            return mu + theta
+        else:
+            return mu + theta * rand
 
     def dynamic_decode(self, decoder, output_time_major, impute_finished, maximum_iterations):
         """
@@ -182,10 +191,17 @@ class sketch_rnn:
                 return tf.transpose(final_out, [1, 0, 2]), final_seq
 
     def get_decoder(self, z):
-        w_z = tf.get_variable("z_init_w", [self.params.dim_z, self.params.num_r_m * 2], dtype=self.params.d_type)
-        b_z = tf.get_variable("z_init_b", [self.params.num_r_m * 2], dtype=self.params.d_type)
-        c0 = tf.slice(tf.matmul(z, w_z) + b_z, [0, 0], [-1, self.params.num_r_m])
-        h0 = tf.slice(tf.matmul(z, w_z) + b_z, [0, self.params.num_r_m], [-1, self.params.num_r_m])
+        """
+        calculate decoder initial states and apply decoder
+        :param z: Z vector
+        :return: final outputs
+        """
+        num_states = self.params.num_r_m + self.params.num_r_h
+        w_z = tf.get_variable("z_init_w", [self.params.dim_z, num_states * 2], dtype=self.params.d_type)
+        b_z = tf.get_variable("z_init_b", [num_states * 2], dtype=self.params.d_type)
+        ini_states = tf.matmul(z, w_z) + b_z
+        c0 = tf.slice(ini_states, [0, 0], [-1, num_states])
+        h0 = tf.slice(ini_states, [0, num_states], [-1, num_states])
         inputs = tf.concat([self.xs,
                            tf.tile(
                                tf.reshape(z, [self.params.batch_size, 1, self.params.dim_z]
@@ -193,17 +209,17 @@ class sketch_rnn:
                            )], axis=2
                            )
 
-        node = self.params.rnn_node
+        node = self.params.decoder_node
         if node == 'hyper_lstm':
             de_cells = HyperLSTMCell(num_units_main=self.params.num_r_m,
                                      num_units_hyper=self.params.num_r_h,
-                                     dim_z=self.params.dim_z,
+                                     dim_z=self.params.dim_z_hyper,
                                      dtype=self.params.d_type)
         elif node == 'hyper_lstm_eff':
             de_cells = HyperLSTMCell_Efficient(
                 num_units_main=self.params.num_r_m,
                 num_units_hyper=self.params.num_r_h,
-                dim_z=self.params.dim_z,
+                dim_z=self.params.dim_z_hyper,
                 keep_prob=(1. - self.params.dr_rnn),
                 dtype=self.params.d_type
             )
