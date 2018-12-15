@@ -28,10 +28,12 @@ The preprocess.py contains functions for data preprocessing and transformation.
 The test.py and sample.py are used to test models or prediction.
 
 # Datasets
-All data files are saved in directory named data
+All data files are saved in directory named data. Here, only readme file is contained to save place.
+And all data can be downloaded in the links below.
 
 ## training, eval, *.classes
-These are the data files in tfrecord for CNN-RNN models.
+These are the data files in tfrecord for CNN-RNN models downloaded from
+http://download.tensorflow.org/data/quickdraw_tutorial_dataset_v1.tar.gz
 
 ## png
 These are the 28 bit map data saved in .npy for CNN model downloaded from
