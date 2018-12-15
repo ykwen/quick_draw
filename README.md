@@ -28,8 +28,13 @@ The preprocess.py contains functions for data preprocessing and transformation.
 The test.py and sample.py are used to test models or prediction.
 
 # Datasets
-All data files are saved in directory named data. Here, only readme file is contained to save place.
+All data files are saved in directory named data. Different kind of data is saved in directories as below.
 And all data can be downloaded in the links below.
+
+The chosen categories for png and simplified directories are:
+diff: ["cat", "angel", "bench", "dragon", "eyeglasses", "ice cream", "t-shirt", "steak"]
+similar: ["bear", "bird", "cat", "duck", "giraffe", "monkey", "panda", "penguin"]
+
 
 ## training, eval, *.classes
 These are the data files in tfrecord for CNN-RNN models downloaded from
