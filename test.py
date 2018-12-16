@@ -39,7 +39,8 @@ def sample_decoder(model_path, data_save_path, category, num_sample):
         kl_min=0.20,
         train_with_inputs=False,
         restore=True,
-        trained_steps=0
+        trained_steps=0,
+        d_type=tf.float64
     )
     with tf.device("/GPU:0"):
         tf.reset_default_graph()
@@ -47,7 +48,7 @@ def sample_decoder(model_path, data_save_path, category, num_sample):
         points = model.sess.run(model.logits)
         for p in points:
             visualize_one_transformed(p)
-        np.save(data_save_path.format(category, num_sample), points)
+        # np.save(data_save_path.format(category, num_sample), points)
 
 
 if __name__ == '__main__':

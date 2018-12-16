@@ -149,6 +149,9 @@ def train_model(model, params, num_iteration, save_every, verbose, X, Y=None, au
                                            feed_dict={model.xs: val_x, model.ys: val_y,
                                                       model.seq_len: val_len})
                 test_summary.value[1].simple_value = valid_acc
+                print("Now at iteration {}, valid loss is {}, valid accuracy is {}".format(i, valid_loss, valid_acc))
+            else:
+                print("Now at iteration {}, valid loss is {}".format(i, valid_loss))
             model.summary_writer.add_summary(test_summary, i + params.trained_steps)
             if prev_loss > valid_loss:
                 model.saver.save(model.sess, params.best_model)
@@ -206,9 +209,9 @@ def train_encoder_model(file_path, save_path):
                 opt_name="Adam",
                 classifier=True,
                 bidir=model_type == "bidir",
-                model="./model/rnn_classifier/{}/{}/{}".format(cate_type, model_type, model_layer),
-                best_model="./model/rnn_classifier/{}/{}/best_{}".format(cate_type, model_type, model_layer),
-                summary="./model/rnn_classifier/log/{}/{}".format(cate_type, model_layer),
+                model="./model/rnn_classifier_tmp/{}/{}/{}".format(cate_type, model_type, model_layer),
+                best_model="./model/rnn_classifier_tmp/{}/{}/best_{}".format(cate_type, model_type, model_layer),
+                summary="./model/rnn_classifier_tmp/log/{}/{}".format(cate_type, model_layer),
                 rnn_node="lstm",
                 num_r_n=512,
                 num_r_l=l,
@@ -216,7 +219,9 @@ def train_encoder_model(file_path, save_path):
                 dr_rnn=0.1,
                 num_classes=8,
                 restore=False,
-                trained_steps=0
+                trained_steps=0,
+                d_type=tf.float64,
+                mode=tf.estimator.ModeKeys.TRAIN,
             )
             with tf.device("/GPU:0"):
                 tf.reset_default_graph()
@@ -252,9 +257,9 @@ def train_decoder_model(file_path, save_path, category):
         opt_name="Adam",
         classifier=False,
         bidir=False,
-        model="./model/rnn_decoder/{}_hyper_small/{}".format(category, category),
-        best_model="./model/rnn_decoder/{}_hyper_small/{}_best".format(category, category),
-        summary="./model/rnn_decoder/log/{}_hyper_small".format(category),
+        model="./model/rnn_decoder_tmp/{}_hyper_small/{}".format(category, category),
+        best_model="./model/rnn_decoder_tmp/{}_hyper_small/{}_best".format(category, category),
+        summary="./model/rnn_decoder_tmp/log/{}_hyper_small".format(category),
         rnn_node="hyper_lstm",
         num_r_m=256,
         num_r_h=64,
@@ -321,9 +326,9 @@ def train_sketch_rnn(file_path, save_path, cate_type):
         opt_name="Adam",
         classifier=False,
         bidir=True,
-        model="./model/sketch_rnn/{}_sketch/{}".format(cate_type, cate_type),
-        best_model="./model/sketch_rnn/{}_sketch/{}_best".format(cate_type, cate_type),
-        summary="./model/sketch_rnn/log/{}_sketch".format(cate_type),
+        model="./model/sketch_rnn_tmp/{}_sketch/{}".format(cate_type, cate_type),
+        best_model="./model/sketch_rnn_tmp/{}_sketch/{}_best".format(cate_type, cate_type),
+        summary="./model/sketch_rnn_tmp/log/{}_sketch".format(cate_type),
         encoder_node="lstm",
         decoder_node="hyper_lstm_eff",
         num_r_n=1024,

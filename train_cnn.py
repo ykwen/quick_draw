@@ -45,13 +45,12 @@ def get_cnn(name, batch_size, num_class, params):
         raise ValueError("Model is not implemented yet")
 
 
-def train_cnn(data, cate_type):
+def train_cnn(data, cnn_type, model_save_path):
     batch_size = 64
     valid_rate = 0.1
     num_iteration = 10000
     save_every = 50
     verbose = 200
-    cnn_type = "res18"
     num_class = len(data)
     params = tf.contrib.training.HParams(
                 batch_size=batch_size,
@@ -61,9 +60,9 @@ def train_cnn(data, cate_type):
                 clip_gradients=1.0,
                 opt_name="Adam",
                 classifier=True,
-                model="./model/cnn_classifier/{}/{}".format(cate_type, cnn_type),
-                best_model="./model/cnn_classifier/{}/{}".format(cate_type, cnn_type,),
-                summary="./model/cnn_classifier/log/{}".format(cate_type, cnn_type),
+                model=model_save_path,
+                best_model=model_save_path,
+                summary=model_save_path,
                 dr_rnn=0.1,
                 mode=tf.estimator.ModeKeys.TRAIN,
                 num_classes=8,
@@ -90,13 +89,14 @@ def train_cnn(data, cate_type):
             model.saver.save(model.sess, params.model)
         if i % verbose == 0 or i == num_iteration - 1:
             valid_loss = model.sess.run(model.loss,
-                                        feed_dict={model.xs: val_x, model.ys: val_y,})
+                                        feed_dict={model.xs: val_x, model.ys: val_y})
 
             test_summary.value[0].simple_value = valid_loss
             if params.classifier:
                 valid_acc = model.sess.run(model.acc,
-                                           feed_dict={model.xs: val_x, model.ys: val_y,})
+                                           feed_dict={model.xs: val_x, model.ys: val_y})
                 test_summary.value[1].simple_value = valid_acc
+            print("Now at iteration {}, valid loss is {}, valid accuracy is {}".format(i, valid_loss, valid_acc))
             model.summary_writer.add_summary(test_summary, i + params.trained_steps)
             if prev_loss > valid_loss:
                 model.saver.save(model.sess, params.best_model)
@@ -122,4 +122,6 @@ if __name__ == '__main__':
     cate_dict_rev = {i: c for i, c in enumerate(categories)}
     png_data = load_png_py(file_path, categories, cate_dict)
 
-    train_cnn(png_data, cate_type)
+    cnn_type = "res18"
+    model_save_path = "./model/cnn_classifier_tmp/{}/{}".format(cate_type, cnn_type)
+    train_cnn(png_data, cnn_type, model_save_path)

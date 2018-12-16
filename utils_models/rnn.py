@@ -116,7 +116,7 @@ class RNNBasic:
             bw = [tf.nn.rnn_cell.DropoutWrapper(c, output_keep_prob=1 - dr) for c in bw]
 
         outputs, _, _ = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            fw, bw, inputs=self.xs, sequence_length=self.seq_len, dtype=tf.float64
+            fw, bw, inputs=self.xs, sequence_length=self.seq_len, dtype=self.params.d_type
         )
         # use the final hidden states, output is [N, max_length, D]
         real_out = tf.reshape(
@@ -139,7 +139,7 @@ class RNNBasic:
 
         cells = tf.nn.rnn_cell.MultiRNNCell(layers)
 
-        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=tf.float64)
+        outputs, _ = tf.nn.dynamic_rnn(cells, self.xs, sequence_length=self.seq_len, dtype=self.params.d_type)
         real_output = tf.reshape(
             tf.gather_nd(outputs,
                          tf.concat([
